@@ -1,5 +1,5 @@
 import { NavLink, useNavigate } from 'react-router-dom';
-import { Database, Zap, Lightbulb, AlertTriangle, Search, Activity, Sparkles, Brain, LogOut, FileSpreadsheet, History, Filter, Beaker, LayoutDashboard } from 'lucide-react';
+import { Database, Zap, Lightbulb, AlertTriangle, Search, Activity, Sparkles, Brain, LogOut, FileSpreadsheet, History, Filter, Beaker, LayoutDashboard, Plug, Bot, ScrollText, Workflow, Ticket, Network } from 'lucide-react';
 
 const navItems = [
   { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -9,6 +9,16 @@ const navItems = [
   { to: '/anomalies', label: 'Anomalies', icon: AlertTriangle },
   { to: '/queries', label: 'Queries', icon: Search },
   { to: '/health', label: 'Health Scores', icon: Activity },
+];
+
+const opsNavItems = [
+  { to: '/kpis', label: 'KPI Registry', icon: Activity },
+  { to: '/workflows', label: 'Workflows', icon: Workflow },
+  { to: '/tickets', label: 'Closed-Loop Tickets', icon: Ticket },
+  { to: '/intent-graph', label: 'Intent Graph', icon: Network },
+  { to: '/agent-dispatcher', label: 'Agent Dispatcher', icon: Bot },
+  { to: '/decision-replay', label: 'Decision Replay', icon: ScrollText },
+  { to: '/connectors', label: 'Connectors', icon: Plug },
 ];
 
 const utilityNavItems = [
@@ -40,6 +50,14 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             <NavLink to="/ai-center" className={({ isActive }) => `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${isActive ? 'bg-teal-500/20 text-teal-400 border border-teal-500/30' : 'text-gray-400 hover:text-white hover:bg-gray-800'}`}>
               <Sparkles className="w-4 h-4 flex-shrink-0" />AI Center
             </NavLink>
+          </div>
+          <div className="pt-4 border-t border-gray-800 mt-2 space-y-0.5">
+            <div className="px-3 pb-1 text-[10px] uppercase tracking-wider text-gray-500">Operating System</div>
+            {opsNavItems.map(({ to, label, icon: Icon }) => (
+              <NavLink key={to} to={to} className={({ isActive }) => `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${isActive ? 'bg-teal-500/20 text-teal-400 border border-teal-500/30' : 'text-gray-400 hover:text-white hover:bg-gray-800'}`}>
+                <Icon className="w-4 h-4 flex-shrink-0" />{label}
+              </NavLink>
+            ))}
           </div>
           <div className="pt-4 border-t border-gray-800 mt-2 space-y-0.5">
             {utilityNavItems.map(({ to, label, icon: Icon }) => (
