@@ -42,3 +42,6 @@ app.use('/api/cf-self-improving-queries', require('./routes/cf-self-improving-qu
 // Deep-feature routes (audit 2026-05-14)
 app.use('/api/kpis', require('./routes/kpis'));
 app.use('/api/workflows', require('./routes/workflows'));
+
+// Custom Views (synthesized cross-feature views, audit 2026-05-18)
+app.use('/api/custom-views', require('./routes/customViews'));

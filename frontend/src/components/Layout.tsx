@@ -1,5 +1,5 @@
 import { NavLink, useNavigate } from 'react-router-dom';
-import { Database, Zap, Lightbulb, AlertTriangle, Search, Activity, Sparkles, Brain, LogOut, FileSpreadsheet, History, Filter, Beaker, LayoutDashboard, Plug, Bot, ScrollText, Workflow, Ticket, Network } from 'lucide-react';
+import { Database, Zap, Lightbulb, AlertTriangle, Search, Activity, Sparkles, Brain, LogOut, FileSpreadsheet, History, Filter, Beaker, LayoutDashboard, Plug, Bot, ScrollText, Workflow, Ticket, Network, Boxes } from 'lucide-react';
 
 const navItems = [
   { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -19,6 +19,7 @@ const opsNavItems = [
   { to: '/agent-dispatcher', label: 'Agent Dispatcher', icon: Bot },
   { to: '/decision-replay', label: 'Decision Replay', icon: ScrollText },
   { to: '/connectors', label: 'Connectors', icon: Plug },
+  { to: '/custom-views', label: 'Org Views', icon: Boxes },
 ];
 
 const utilityNavItems = [

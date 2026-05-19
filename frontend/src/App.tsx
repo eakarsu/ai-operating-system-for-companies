@@ -21,6 +21,7 @@ import KpiDashboard from './pages/KpiDashboard';
 import WorkflowsPage from './pages/WorkflowsPage';
 import ClosedLoopTicketsPage from './pages/ClosedLoopTicketsPage';
 import IntentGraphPage from './pages/IntentGraphPage';
+import CustomViewsPage from './pages/CustomViewsPage';
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const token = localStorage.getItem('token');
@@ -53,6 +54,7 @@ export default function App() {
                 <Route path="/workflows" element={<WorkflowsPage />} />
                 <Route path="/tickets" element={<ClosedLoopTicketsPage />} />
                 <Route path="/intent-graph" element={<IntentGraphPage />} />
+                <Route path="/custom-views" element={<CustomViewsPage />} />
                 <Route path="/search" element={<SearchPage />} />
                 <Route path="/export" element={<ExportPage />} />
                 <Route path="/activity" element={<ActivityPage />} />
