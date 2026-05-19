@@ -38,3 +38,10 @@ app.use('/api/cf-closed-loop-tickets', require('./routes/cf-closed-loop-tickets'
 app.use('/api/cf-embeddings-index', require('./routes/cf-embeddings-index'));
 app.use('/api/cf-intent-graph', require('./routes/cf-intent-graph'));
 app.use('/api/cf-self-improving-queries', require('./routes/cf-self-improving-queries'));
+
+// Deep-feature routes (audit 2026-05-14)
+app.use('/api/kpis', require('./routes/kpis'));
+app.use('/api/workflows', require('./routes/workflows'));
+
+// Custom Views (synthesized cross-feature views, audit 2026-05-18)
+app.use('/api/custom-views', require('./routes/customViews'));

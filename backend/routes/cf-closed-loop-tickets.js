@@ -1,92 +1,145 @@
+// Closed-Loop Tickets — full lifecycle of anomaly/insight -> spec -> ticket
+// -> resolution -> KPI outcome. Closes the loop the brief describes
+// (open-loop -> closed-loop).
+
 const express = require('express');
 const router = express.Router();
-const verifyToken = require('../middleware/auth');
+const verifyToken = require("../middleware/auth");
 const pool = require('../db');
-
-// TODO: configure credentials (OPENROUTER_API_KEY) in .env
-// Feature: Closed-Loop Ticket Generation (cf) — auto-scaffolded from audit gap.
-// Project: ai-operating-system-for-companies
 
 router.use(verifyToken);
 
-async function ensureTable() {
+router.get('/', async (req, res) => {
   try {
-    await pool.query(`CREATE TABLE IF NOT EXISTS gap_features (
-      id SERIAL PRIMARY KEY,
-      feature_slug TEXT NOT NULL,
-      user_id INTEGER,
-      input JSONB,
-      output TEXT,
-      created_at TIMESTAMP DEFAULT NOW()
-    )`);
-  } catch (e) { /* swallow */ }
-}
+    const { status, source_type, priority, kpi } = req.query;
+    const where = [];
+    const args = [];
+    if (status)       { args.push(status); where.push(`status=$${args.length}`); }
+    if (source_type)  { args.push(source_type); where.push(`source_type=$${args.length}`); }
+    if (priority)     { args.push(priority); where.push(`priority=$${args.length}`); }
+    if (kpi)          { args.push(kpi); where.push(`loop_closed_kpi=$${args.length}`); }
 
-async function callAI(userPrompt, systemPrompt = '') {
-  if (!process.env.OPENROUTER_API_KEY) return 'AI unavailable (no API key configured).';
+    const sql = `SELECT * FROM closed_loop_tickets
+                 ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
+                 ORDER BY status='open' DESC, priority='critical' DESC, priority='high' DESC, created_at DESC`;
+    const r = await pool.query(sql, args);
+    res.json({ tickets: r.rows });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.get('/stats', async (_req, res) => {
   try {
-    const resp = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
-        'Content-Type': 'application/json',
-        'HTTP-Referer': 'http://localhost',
-        'X-Title': 'Closed-Loop Ticket Generation'
-      },
-      body: JSON.stringify({
-        model: process.env.OPENROUTER_MODEL || 'anthropic/claude-haiku-4.5',
-        messages: [
-          ...(systemPrompt ? [{ role: 'system', content: systemPrompt }] : []),
-          { role: 'user', content: userPrompt }
-        ]
-      })
+    const byStatus = await pool.query(`SELECT status, COUNT(*) AS n FROM closed_loop_tickets GROUP BY status`);
+    const bySource = await pool.query(`SELECT source_type, COUNT(*) AS n FROM closed_loop_tickets GROUP BY source_type`);
+    const byPriority = await pool.query(`SELECT priority, COUNT(*) AS n FROM closed_loop_tickets GROUP BY priority`);
+    // KPI loop-closure success rate
+    const loopClosure = await pool.query(`
+      SELECT loop_closed_kpi,
+             COUNT(*) FILTER (WHERE status='resolved') AS resolved,
+             COUNT(*) AS total,
+             ROUND(AVG(CASE WHEN baseline_value IS NOT NULL AND outcome_value IS NOT NULL
+               THEN (outcome_value - baseline_value) ELSE NULL END), 2) AS avg_delta
+      FROM closed_loop_tickets
+      WHERE loop_closed_kpi IS NOT NULL
+      GROUP BY loop_closed_kpi`);
+    const cycleTime = await pool.query(`
+      SELECT AVG(EXTRACT(EPOCH FROM (resolved_at - created_at))/86400)::numeric(10,1) AS avg_days
+      FROM closed_loop_tickets WHERE resolved_at IS NOT NULL`);
+    res.json({
+      by_status: byStatus.rows,
+      by_source: bySource.rows,
+      by_priority: byPriority.rows,
+      loop_closure: loopClosure.rows,
+      avg_cycle_days: cycleTime.rows[0]?.avg_days || null
     });
-    const data = await resp.json();
-    return data.choices?.[0]?.message?.content || 'AI unavailable';
-  } catch (e) {
-    return `AI error: ${e.message}`;
-  }
-}
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.get('/:id', async (req, res) => {
+  try {
+    const t = await pool.query('SELECT * FROM closed_loop_tickets WHERE id=$1', [req.params.id]);
+    if (!t.rows[0]) return res.status(404).json({ error: 'Not found' });
+
+    // pull related KPI history if linked
+    let kpiHistory = [];
+    if (t.rows[0].loop_closed_kpi) {
+      const r = await pool.query(`
+        SELECT ks.period, ks.value, ks.status, ks.recorded_at
+        FROM kpi_snapshots ks JOIN kpis k ON k.id=ks.kpi_id
+        WHERE k.slug=$1 ORDER BY ks.recorded_at`, [t.rows[0].loop_closed_kpi]);
+      kpiHistory = r.rows;
+    }
+    res.json({ ticket: t.rows[0], kpi_history: kpiHistory });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
 
 router.post('/', async (req, res) => {
   try {
-    await ensureTable();
-    const body = req.body || {};
-    const systemPrompt = `You are an expert assistant for the "Closed-Loop Ticket Generation" feature in the ai-operating-system-for-companies platform. Provide actionable, specific, structured output.`;
-    const userPrompt = `Feature: Closed-Loop Ticket Generation
-Kind: cf
-Context:
-${JSON.stringify(body, null, 2)}
-
-Please produce:
-1. Summary of what this feature should do given the input.
-2. Specific recommendations or computed outputs (3-7 bullets).
-3. Suggested next steps or data the operator should collect.
-4. Risk / caveat callouts.`;
-    const result = await callAI(userPrompt, systemPrompt);
-    try {
-      await pool.query(
-        'INSERT INTO gap_features (feature_slug, user_id, input, output) VALUES ($1,$2,$3,$4)',
-        ['closed-loop-tickets', req.user?.id || null, body, result]
-      );
-    } catch (e) { /* persistence optional */ }
-    res.json({ feature: 'Closed-Loop Ticket Generation', kind: 'cf', result });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
+    const b = req.body || {};
+    if (!b.title) return res.status(400).json({ error: 'title required' });
+    const r = await pool.query(`INSERT INTO closed_loop_tickets
+      (source_type, source_id, title, spec, assignee, external_url,
+       status, priority, loop_closed_kpi, baseline_value)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
+      [b.source_type || 'manual', b.source_id || null, b.title, b.spec || '',
+       b.assignee || null, b.external_url || null, b.status || 'open',
+       b.priority || 'medium', b.loop_closed_kpi || null, b.baseline_value || null]);
+    res.status(201).json({ ticket: r.rows[0] });
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-router.get('/history', async (req, res) => {
+router.put('/:id', async (req, res) => {
   try {
-    await ensureTable();
-    const r = await pool.query(
-      'SELECT id, input, output, created_at FROM gap_features WHERE feature_slug=$1 ORDER BY created_at DESC LIMIT 25',
-      ['closed-loop-tickets']
-    );
-    res.json({ history: r.rows });
-  } catch (err) {
-    res.json({ history: [] });
-  }
+    const b = req.body || {};
+    const fields = ['title','spec','assignee','external_url','status','priority',
+      'loop_closed_kpi','baseline_value','outcome_value','resolution_notes'];
+    const sets = [];
+    const args = [];
+    for (const f of fields) {
+      if (Object.prototype.hasOwnProperty.call(b, f)) {
+        args.push(b[f]);
+        sets.push(`${f}=$${args.length}`);
+      }
+    }
+    if (b.status === 'resolved' && !b.resolved_at) {
+      sets.push(`resolved_at=NOW()`);
+    }
+    if (!sets.length) return res.status(400).json({ error: 'No updatable fields' });
+    args.push(req.params.id);
+    const r = await pool.query(`UPDATE closed_loop_tickets SET ${sets.join(', ')}
+      WHERE id=$${args.length} RETURNING *`, args);
+    if (!r.rows[0]) return res.status(404).json({ error: 'Not found' });
+    res.json({ ticket: r.rows[0] });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.post('/:id/resolve', async (req, res) => {
+  try {
+    const { outcome_value, resolution_notes } = req.body || {};
+    const r = await pool.query(`UPDATE closed_loop_tickets
+      SET status='resolved', resolved_at=NOW(),
+          outcome_value=COALESCE($2, outcome_value),
+          resolution_notes=COALESCE($3, resolution_notes)
+      WHERE id=$1 RETURNING *`, [req.params.id, outcome_value || null, resolution_notes || null]);
+    if (!r.rows[0]) return res.status(404).json({ error: 'Not found' });
+
+    // Log a decision row capturing the closure.
+    await pool.query(`INSERT INTO decision_log
+      (decision_type, actor, subject, rationale, evidence, confidence_pct, reversible, human_approved)
+      VALUES ('ticket_resolution', $1, $2, $3, $4, 95, true, true)`,
+      [req.user?.email ? `human:${req.user.email}` : 'agent:executor',
+       `Resolved ticket #${r.rows[0].id}: ${r.rows[0].title}`,
+       resolution_notes || 'Manual closure',
+       JSON.stringify({ baseline: r.rows[0].baseline_value, outcome: r.rows[0].outcome_value })]);
+    res.json({ ticket: r.rows[0] });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.delete('/:id', async (req, res) => {
+  try {
+    await pool.query('DELETE FROM closed_loop_tickets WHERE id=$1', [req.params.id]);
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 module.exports = router;
