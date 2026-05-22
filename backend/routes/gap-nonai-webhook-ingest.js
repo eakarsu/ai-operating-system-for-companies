@@ -1,92 +1,140 @@
+// Webhook Ingestion — register inbound webhook subscriptions and accept
+// deliveries. Verifies optional HMAC-SHA256 signature header against the
+// stored secret. Promotes recognized payloads into the events table.
+// Tables: webhook_subscriptions, webhook_deliveries. (Events table reused.)
+
 const express = require('express');
 const router = express.Router();
+const crypto = require('crypto');
 const verifyToken = require("../middleware/auth");
 const pool = require('../db');
 
-// TODO: configure credentials (OPENROUTER_API_KEY) in .env
-// Feature: Webhook Ingestion Endpoint (gap-nonai) — auto-scaffolded from audit gap.
-// Project: ai-operating-system-for-companies
-
-router.use(verifyToken);
-
-async function ensureTable() {
+async function ensureTables() {
   try {
-    await pool.query(`CREATE TABLE IF NOT EXISTS gap_features (
+    await pool.query(`CREATE TABLE IF NOT EXISTS webhook_subscriptions (
       id SERIAL PRIMARY KEY,
-      feature_slug TEXT NOT NULL,
-      user_id INTEGER,
-      input JSONB,
-      output TEXT,
+      slug VARCHAR(80) UNIQUE NOT NULL,
+      vendor VARCHAR(80),
+      description TEXT,
+      secret VARCHAR(120),
+      active BOOLEAN DEFAULT TRUE,
       created_at TIMESTAMP DEFAULT NOW()
+    )`);
+    await pool.query(`CREATE TABLE IF NOT EXISTS webhook_deliveries (
+      id SERIAL PRIMARY KEY,
+      subscription_slug VARCHAR(80) NOT NULL,
+      event_type VARCHAR(120),
+      headers JSONB,
+      payload JSONB,
+      status VARCHAR(20) DEFAULT 'received',
+      received_at TIMESTAMP DEFAULT NOW()
     )`);
   } catch (e) { /* swallow */ }
 }
 
-async function callAI(userPrompt, systemPrompt = '') {
-  if (!process.env.OPENROUTER_API_KEY) return 'AI unavailable (no API key configured).';
+// The public ingest endpoint is intentionally NOT behind auth — vendors call
+// it directly. Verification is via HMAC against the stored secret when present.
+router.post('/in/:slug', express.json({ limit: '1mb' }), async (req, res) => {
   try {
-    const resp = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
-        'Content-Type': 'application/json',
-        'HTTP-Referer': 'http://localhost',
-        'X-Title': 'Webhook Ingestion Endpoint'
-      },
-      body: JSON.stringify({
-        model: process.env.OPENROUTER_MODEL || 'anthropic/claude-haiku-4.5',
-        messages: [
-          ...(systemPrompt ? [{ role: 'system', content: systemPrompt }] : []),
-          { role: 'user', content: userPrompt }
-        ]
-      })
-    });
-    const data = await resp.json();
-    return data.choices?.[0]?.message?.content || 'AI unavailable';
-  } catch (e) {
-    return `AI error: ${e.message}`;
-  }
-}
+    await ensureTables();
+    const sub = (await pool.query(
+      'SELECT * FROM webhook_subscriptions WHERE slug=$1 AND active=true',
+      [req.params.slug])).rows[0];
+    if (!sub) return res.status(404).json({ error: 'Unknown subscription' });
 
-router.post('/', async (req, res) => {
-  try {
-    await ensureTable();
-    const body = req.body || {};
-    const systemPrompt = `You are an expert assistant for the "Webhook Ingestion Endpoint" feature in the ai-operating-system-for-companies platform. Provide actionable, specific, structured output.`;
-    const userPrompt = `Feature: Webhook Ingestion Endpoint
-Kind: gap-nonai
-Context:
-${JSON.stringify(body, null, 2)}
+    if (sub.secret) {
+      const sig = req.headers['x-signature'] || req.headers['x-hub-signature-256'];
+      const expected = 'sha256=' + crypto.createHmac('sha256', sub.secret)
+        .update(JSON.stringify(req.body || {})).digest('hex');
+      if (!sig || (sig !== expected && sig !== expected.slice(7))) {
+        return res.status(401).json({ error: 'Bad signature' });
+      }
+    }
 
-Please produce:
-1. Summary of what this feature should do given the input.
-2. Specific recommendations or computed outputs (3-7 bullets).
-3. Suggested next steps or data the operator should collect.
-4. Risk / caveat callouts.`;
-    const result = await callAI(userPrompt, systemPrompt);
-    try {
-      await pool.query(
-        'INSERT INTO gap_features (feature_slug, user_id, input, output) VALUES ($1,$2,$3,$4)',
-        ['webhook-ingest', req.user?.id || null, body, result]
-      );
-    } catch (e) { /* persistence optional */ }
-    res.json({ feature: 'Webhook Ingestion Endpoint', kind: 'gap-nonai', result });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
+    const payload = req.body || {};
+    const eventType = payload.event_type || payload.type || req.headers['x-event'] || 'unknown';
+
+    const ins = await pool.query(
+      `INSERT INTO webhook_deliveries (subscription_slug, event_type, headers, payload, status)
+       VALUES ($1,$2,$3,$4,'received') RETURNING id`,
+      [sub.slug, eventType, req.headers, payload]
+    );
+
+    // Promote into events table for downstream pipelines.
+    await pool.query(
+      `INSERT INTO events (event_type, title, description, payload, severity, status)
+       VALUES ($1,$2,$3,$4,$5,'new')`,
+      [`webhook.${sub.vendor || sub.slug}.${eventType}`.slice(0, 100),
+       (payload.title || payload.summary || `${sub.vendor || sub.slug} webhook`).toString().slice(0, 255),
+       (payload.description || `Webhook delivery ${ins.rows[0].id}`).toString(),
+       payload, 'info']
+    );
+    res.status(202).json({ delivery_id: ins.rows[0].id });
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-router.get('/history', async (req, res) => {
+// All other endpoints are JWT-protected.
+router.use(verifyToken);
+
+router.get('/subscriptions', async (_req, res) => {
   try {
-    await ensureTable();
+    await ensureTables();
     const r = await pool.query(
-      'SELECT id, input, output, created_at FROM gap_features WHERE feature_slug=$1 ORDER BY created_at DESC LIMIT 25',
-      ['webhook-ingest']
+      `SELECT id, slug, vendor, description, active, created_at,
+              CASE WHEN secret IS NOT NULL AND secret <> '' THEN true ELSE false END AS has_secret
+       FROM webhook_subscriptions ORDER BY active DESC, slug`);
+    res.json({ subscriptions: r.rows });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.post('/subscriptions', async (req, res) => {
+  try {
+    await ensureTables();
+    const b = req.body || {};
+    if (!b.slug) return res.status(400).json({ error: 'slug required' });
+    const secret = b.secret || crypto.randomBytes(16).toString('hex');
+    const r = await pool.query(
+      `INSERT INTO webhook_subscriptions (slug, vendor, description, secret, active)
+       VALUES ($1,$2,$3,$4,$5)
+       ON CONFLICT (slug) DO UPDATE SET vendor=$2, description=$3, active=$5 RETURNING *`,
+      [b.slug, b.vendor || null, b.description || null, secret, b.active === false ? false : true]
     );
-    res.json({ history: r.rows });
-  } catch (err) {
-    res.json({ history: [] });
-  }
+    res.status(201).json({ subscription: r.rows[0], ingest_url: `/api/gap-nonai-webhook-ingest/in/${b.slug}` });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.delete('/subscriptions/:slug', async (req, res) => {
+  try {
+    await ensureTables();
+    await pool.query('DELETE FROM webhook_subscriptions WHERE slug=$1', [req.params.slug]);
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.get('/deliveries', async (req, res) => {
+  try {
+    await ensureTables();
+    const { subscription_slug, status, limit } = req.query;
+    const where = []; const args = [];
+    if (subscription_slug) { args.push(subscription_slug); where.push(`subscription_slug=$${args.length}`); }
+    if (status)            { args.push(status); where.push(`status=$${args.length}`); }
+    args.push(Math.min(parseInt(limit) || 50, 200));
+    const sql = `SELECT id, subscription_slug, event_type, status, received_at
+                 FROM webhook_deliveries
+                 ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
+                 ORDER BY received_at DESC LIMIT $${args.length}`;
+    const r = await pool.query(sql, args);
+    res.json({ deliveries: r.rows });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.get('/deliveries/:id', async (req, res) => {
+  try {
+    await ensureTables();
+    const r = await pool.query('SELECT * FROM webhook_deliveries WHERE id=$1', [req.params.id]);
+    if (!r.rows[0]) return res.status(404).json({ error: 'Not found' });
+    res.json({ delivery: r.rows[0] });
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 module.exports = router;

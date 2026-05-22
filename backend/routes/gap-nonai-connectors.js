@@ -1,92 +1,120 @@
+// Connector Code (Slack/Linear/GitHub etc.) — lightweight per-tenant
+// connector scripts that wire a vendor into a topic. Stored as inert text
+// (not eval'd here); operators can register/edit/list/mark runs.
+// Table: connector_scripts.
+
 const express = require('express');
 const router = express.Router();
 const verifyToken = require("../middleware/auth");
 const pool = require('../db');
 
-// TODO: configure credentials (OPENROUTER_API_KEY) in .env
-// Feature: Connector Code (Slack/Linear/GitHub) (gap-nonai) — auto-scaffolded from audit gap.
-// Project: ai-operating-system-for-companies
-
 router.use(verifyToken);
 
-async function ensureTable() {
+async function ensureTables() {
   try {
-    await pool.query(`CREATE TABLE IF NOT EXISTS gap_features (
+    await pool.query(`CREATE TABLE IF NOT EXISTS connector_scripts (
       id SERIAL PRIMARY KEY,
-      feature_slug TEXT NOT NULL,
-      user_id INTEGER,
-      input JSONB,
-      output TEXT,
+      vendor VARCHAR(60) NOT NULL,
+      topic VARCHAR(80),
+      language VARCHAR(20) DEFAULT 'javascript',
+      body TEXT,
+      active BOOLEAN DEFAULT TRUE,
+      last_run_at TIMESTAMP,
+      last_run_status VARCHAR(20),
       created_at TIMESTAMP DEFAULT NOW()
     )`);
   } catch (e) { /* swallow */ }
 }
 
-async function callAI(userPrompt, systemPrompt = '') {
-  if (!process.env.OPENROUTER_API_KEY) return 'AI unavailable (no API key configured).';
+const TEMPLATES = {
+  slack:  `// Slack: post a channel message\nmodule.exports = async ({ channel, text }) => {\n  // call Slack chat.postMessage with stored OAuth token\n  return { ok: true, channel, text };\n};`,
+  linear: `// Linear: create an issue\nmodule.exports = async ({ team, title, description }) => {\n  // call Linear GraphQL issueCreate\n  return { ok: true, team, title };\n};`,
+  github: `// GitHub: open a PR\nmodule.exports = async ({ repo, head, base, title, body }) => {\n  // POST /repos/:owner/:repo/pulls\n  return { ok: true, repo, head, base, title };\n};`,
+  gmail:  `// Gmail: draft a reply\nmodule.exports = async ({ thread_id, body }) => {\n  return { ok: true, thread_id };\n};`,
+};
+
+router.get('/templates', async (_req, res) => {
+  res.json({ templates: Object.entries(TEMPLATES).map(([vendor, body]) => ({ vendor, body })) });
+});
+
+router.get('/', async (req, res) => {
   try {
-    const resp = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
-        'Content-Type': 'application/json',
-        'HTTP-Referer': 'http://localhost',
-        'X-Title': 'Connector Code (Slack/Linear/GitHub)'
-      },
-      body: JSON.stringify({
-        model: process.env.OPENROUTER_MODEL || 'anthropic/claude-haiku-4.5',
-        messages: [
-          ...(systemPrompt ? [{ role: 'system', content: systemPrompt }] : []),
-          { role: 'user', content: userPrompt }
-        ]
-      })
-    });
-    const data = await resp.json();
-    return data.choices?.[0]?.message?.content || 'AI unavailable';
-  } catch (e) {
-    return `AI error: ${e.message}`;
-  }
-}
+    await ensureTables();
+    const { vendor, active } = req.query;
+    const where = []; const args = [];
+    if (vendor) { args.push(vendor); where.push(`vendor=$${args.length}`); }
+    if (active !== undefined) { args.push(active === 'true'); where.push(`active=$${args.length}`); }
+    const sql = `SELECT id, vendor, topic, language, active, last_run_at, last_run_status, created_at,
+                        LEFT(COALESCE(body,''), 120) AS body_preview
+                 FROM connector_scripts
+                 ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
+                 ORDER BY active DESC, vendor, topic`;
+    const r = await pool.query(sql, args);
+    res.json({ scripts: r.rows });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.get('/:id', async (req, res) => {
+  try {
+    await ensureTables();
+    const r = await pool.query('SELECT * FROM connector_scripts WHERE id=$1', [req.params.id]);
+    if (!r.rows[0]) return res.status(404).json({ error: 'Not found' });
+    res.json({ script: r.rows[0] });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
 
 router.post('/', async (req, res) => {
   try {
-    await ensureTable();
-    const body = req.body || {};
-    const systemPrompt = `You are an expert assistant for the "Connector Code (Slack/Linear/GitHub)" feature in the ai-operating-system-for-companies platform. Provide actionable, specific, structured output.`;
-    const userPrompt = `Feature: Connector Code (Slack/Linear/GitHub)
-Kind: gap-nonai
-Context:
-${JSON.stringify(body, null, 2)}
-
-Please produce:
-1. Summary of what this feature should do given the input.
-2. Specific recommendations or computed outputs (3-7 bullets).
-3. Suggested next steps or data the operator should collect.
-4. Risk / caveat callouts.`;
-    const result = await callAI(userPrompt, systemPrompt);
-    try {
-      await pool.query(
-        'INSERT INTO gap_features (feature_slug, user_id, input, output) VALUES ($1,$2,$3,$4)',
-        ['connectors', req.user?.id || null, body, result]
-      );
-    } catch (e) { /* persistence optional */ }
-    res.json({ feature: 'Connector Code (Slack/Linear/GitHub)', kind: 'gap-nonai', result });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
+    await ensureTables();
+    const b = req.body || {};
+    if (!b.vendor) return res.status(400).json({ error: 'vendor required' });
+    const body = b.body || TEMPLATES[b.vendor] || `// ${b.vendor} connector\nmodule.exports = async (input) => ({ ok: true });`;
+    const r = await pool.query(
+      `INSERT INTO connector_scripts (vendor, topic, language, body, active)
+       VALUES ($1,$2,$3,$4,$5) RETURNING *`,
+      [b.vendor, b.topic || null, b.language || 'javascript', body, b.active === false ? false : true]
+    );
+    res.status(201).json({ script: r.rows[0] });
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-router.get('/history', async (req, res) => {
+router.put('/:id', async (req, res) => {
   try {
-    await ensureTable();
+    await ensureTables();
+    const b = req.body || {};
+    const fields = ['vendor','topic','language','body','active'];
+    const sets = []; const args = [];
+    for (const f of fields) {
+      if (Object.prototype.hasOwnProperty.call(b, f)) { args.push(b[f]); sets.push(`${f}=$${args.length}`); }
+    }
+    if (!sets.length) return res.status(400).json({ error: 'No updatable fields' });
+    args.push(req.params.id);
+    const r = await pool.query(`UPDATE connector_scripts SET ${sets.join(', ')} WHERE id=$${args.length} RETURNING *`, args);
+    if (!r.rows[0]) return res.status(404).json({ error: 'Not found' });
+    res.json({ script: r.rows[0] });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.delete('/:id', async (req, res) => {
+  try {
+    await ensureTables();
+    await pool.query('DELETE FROM connector_scripts WHERE id=$1', [req.params.id]);
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Mark a synthetic run (real execution would happen in a sandboxed worker).
+router.post('/:id/mark-run', async (req, res) => {
+  try {
+    await ensureTables();
+    const status = (req.body && req.body.status) || 'ok';
     const r = await pool.query(
-      'SELECT id, input, output, created_at FROM gap_features WHERE feature_slug=$1 ORDER BY created_at DESC LIMIT 25',
-      ['connectors']
+      `UPDATE connector_scripts SET last_run_at=NOW(), last_run_status=$1 WHERE id=$2 RETURNING *`,
+      [status, req.params.id]
     );
-    res.json({ history: r.rows });
-  } catch (err) {
-    res.json({ history: [] });
-  }
+    if (!r.rows[0]) return res.status(404).json({ error: 'Not found' });
+    res.json({ script: r.rows[0] });
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 module.exports = router;

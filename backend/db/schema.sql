@@ -330,3 +330,158 @@ CREATE TABLE IF NOT EXISTS closed_loop_tickets (
   created_at TIMESTAMP DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS closed_loop_tickets_status_idx ON closed_loop_tickets(status);
+
+-- ============================================================================
+-- Pass 7: full backlog implementation tables
+-- Real, DB-backed replacements for the auto-scaffolded gap-* / cf-* routes.
+-- ============================================================================
+
+-- gap-nonai-rbac: roles, permissions, user-role assignments
+CREATE TABLE IF NOT EXISTS roles (
+  id SERIAL PRIMARY KEY,
+  slug VARCHAR(60) UNIQUE NOT NULL,
+  name VARCHAR(120) NOT NULL,
+  description TEXT,
+  permissions TEXT, -- comma-separated permission keys
+  created_at TIMESTAMP DEFAULT NOW()
+);
+CREATE TABLE IF NOT EXISTS user_roles (
+  id SERIAL PRIMARY KEY,
+  user_email VARCHAR(255) NOT NULL,
+  role_slug VARCHAR(60) NOT NULL,
+  granted_by VARCHAR(255),
+  granted_at TIMESTAMP DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS user_roles_email_idx ON user_roles(user_email);
+
+-- gap-nonai-alerting: alert rules and fired alerts
+CREATE TABLE IF NOT EXISTS alert_rules (
+  id SERIAL PRIMARY KEY,
+  name VARCHAR(200) NOT NULL,
+  entity_type VARCHAR(60) NOT NULL, -- 'anomaly','event','kpi','health'
+  match_field VARCHAR(60),          -- e.g. 'severity','status','metric_name'
+  match_value VARCHAR(120),
+  operator VARCHAR(10) DEFAULT '=', -- =, !=, >, <, contains
+  channel VARCHAR(40) NOT NULL,     -- 'email','slack','webhook','in_app'
+  destination TEXT,                 -- email, channel id, url
+  enabled BOOLEAN DEFAULT TRUE,
+  created_at TIMESTAMP DEFAULT NOW()
+);
+CREATE TABLE IF NOT EXISTS alert_events (
+  id SERIAL PRIMARY KEY,
+  rule_id INTEGER REFERENCES alert_rules(id) ON DELETE SET NULL,
+  entity_type VARCHAR(60),
+  entity_id INTEGER,
+  channel VARCHAR(40),
+  destination TEXT,
+  payload JSONB,
+  status VARCHAR(20) DEFAULT 'queued', -- queued, sent, ack, failed
+  fired_at TIMESTAMP DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS alert_events_fired_idx ON alert_events(fired_at DESC);
+
+-- gap-nonai-pii-redaction: redaction policies + redacted log
+CREATE TABLE IF NOT EXISTS pii_policies (
+  id SERIAL PRIMARY KEY,
+  name VARCHAR(120) NOT NULL,
+  pattern_type VARCHAR(40) NOT NULL, -- 'email','phone','ssn','credit_card','custom'
+  custom_regex TEXT,
+  replacement VARCHAR(60) DEFAULT '[REDACTED]',
+  retention_days INTEGER DEFAULT 90,
+  enabled BOOLEAN DEFAULT TRUE,
+  created_at TIMESTAMP DEFAULT NOW()
+);
+CREATE TABLE IF NOT EXISTS pii_redactions (
+  id SERIAL PRIMARY KEY,
+  policy_id INTEGER REFERENCES pii_policies(id) ON DELETE SET NULL,
+  source_text_hash VARCHAR(64),
+  matches_count INTEGER DEFAULT 0,
+  redacted_preview TEXT,
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+-- gap-nonai-transcripts: call recordings / transcript ingest
+CREATE TABLE IF NOT EXISTS transcripts (
+  id SERIAL PRIMARY KEY,
+  source VARCHAR(60),               -- 'gong','zoom','meet','manual'
+  external_id VARCHAR(160),
+  title VARCHAR(255),
+  participants TEXT,
+  meeting_at TIMESTAMP,
+  duration_min INTEGER,
+  body TEXT,
+  summary TEXT,
+  action_items TEXT,
+  sentiment VARCHAR(20),
+  tags TEXT,
+  created_at TIMESTAMP DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS transcripts_meeting_idx ON transcripts(meeting_at DESC);
+
+-- gap-nonai-webhook-ingest: inbound webhook subscriptions + delivery log
+CREATE TABLE IF NOT EXISTS webhook_subscriptions (
+  id SERIAL PRIMARY KEY,
+  slug VARCHAR(80) UNIQUE NOT NULL,
+  vendor VARCHAR(80),
+  description TEXT,
+  secret VARCHAR(120),
+  active BOOLEAN DEFAULT TRUE,
+  created_at TIMESTAMP DEFAULT NOW()
+);
+CREATE TABLE IF NOT EXISTS webhook_deliveries (
+  id SERIAL PRIMARY KEY,
+  subscription_slug VARCHAR(80) NOT NULL,
+  event_type VARCHAR(120),
+  headers JSONB,
+  payload JSONB,
+  status VARCHAR(20) DEFAULT 'received',
+  received_at TIMESTAMP DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS webhook_deliveries_sub_idx ON webhook_deliveries(subscription_slug, received_at DESC);
+
+-- gap-nonai-connectors: lightweight connector wiring scripts (separate from
+-- the full cf-connector-marketplace catalog; this stores per-tenant snippets
+-- that engineers register to wire a vendor into a specific event topic).
+CREATE TABLE IF NOT EXISTS connector_scripts (
+  id SERIAL PRIMARY KEY,
+  vendor VARCHAR(60) NOT NULL,
+  topic VARCHAR(80),
+  language VARCHAR(20) DEFAULT 'javascript',
+  body TEXT,
+  active BOOLEAN DEFAULT TRUE,
+  last_run_at TIMESTAMP,
+  last_run_status VARCHAR(20),
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+-- gap-ai-query-suggest: suggestion log (uses existing saved_queries for source)
+CREATE TABLE IF NOT EXISTS query_suggestions (
+  id SERIAL PRIMARY KEY,
+  context TEXT,
+  suggestions JSONB,
+  picked_index INTEGER,
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+-- gap-ai-source-onboarding-agent: onboarding plans for new sources
+CREATE TABLE IF NOT EXISTS source_onboarding_plans (
+  id SERIAL PRIMARY KEY,
+  vendor VARCHAR(80),
+  goal TEXT,
+  plan JSONB,
+  status VARCHAR(20) DEFAULT 'draft',
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+-- cf-self-improving-queries: rating feedback against saved_queries
+CREATE TABLE IF NOT EXISTS query_feedback (
+  id SERIAL PRIMARY KEY,
+  query_id INTEGER REFERENCES saved_queries(id) ON DELETE CASCADE,
+  rating INTEGER,                   -- 1-5
+  was_useful BOOLEAN,
+  comment TEXT,
+  improved_text TEXT,               -- proposed better version
+  applied BOOLEAN DEFAULT FALSE,
+  created_at TIMESTAMP DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS query_feedback_query_idx ON query_feedback(query_id);

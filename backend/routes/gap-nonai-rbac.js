@@ -1,92 +1,120 @@
+// Role-Based Access Control — real RBAC management.
+// Operators define roles + permissions, then assign roles to user emails.
+// Tables: roles, user_roles (see schema.sql).
+// All endpoints JWT-protected.
+
 const express = require('express');
 const router = express.Router();
 const verifyToken = require("../middleware/auth");
 const pool = require('../db');
 
-// TODO: configure credentials (OPENROUTER_API_KEY) in .env
-// Feature: Role-Based Access Control (gap-nonai) — auto-scaffolded from audit gap.
-// Project: ai-operating-system-for-companies
-
 router.use(verifyToken);
 
-async function ensureTable() {
+async function ensureTables() {
   try {
-    await pool.query(`CREATE TABLE IF NOT EXISTS gap_features (
+    await pool.query(`CREATE TABLE IF NOT EXISTS roles (
       id SERIAL PRIMARY KEY,
-      feature_slug TEXT NOT NULL,
-      user_id INTEGER,
-      input JSONB,
-      output TEXT,
+      slug VARCHAR(60) UNIQUE NOT NULL,
+      name VARCHAR(120) NOT NULL,
+      description TEXT,
+      permissions TEXT,
       created_at TIMESTAMP DEFAULT NOW()
+    )`);
+    await pool.query(`CREATE TABLE IF NOT EXISTS user_roles (
+      id SERIAL PRIMARY KEY,
+      user_email VARCHAR(255) NOT NULL,
+      role_slug VARCHAR(60) NOT NULL,
+      granted_by VARCHAR(255),
+      granted_at TIMESTAMP DEFAULT NOW()
     )`);
   } catch (e) { /* swallow */ }
 }
 
-async function callAI(userPrompt, systemPrompt = '') {
-  if (!process.env.OPENROUTER_API_KEY) return 'AI unavailable (no API key configured).';
+// List all roles
+router.get('/roles', async (_req, res) => {
   try {
-    const resp = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
-        'Content-Type': 'application/json',
-        'HTTP-Referer': 'http://localhost',
-        'X-Title': 'Role-Based Access Control'
-      },
-      body: JSON.stringify({
-        model: process.env.OPENROUTER_MODEL || 'anthropic/claude-haiku-4.5',
-        messages: [
-          ...(systemPrompt ? [{ role: 'system', content: systemPrompt }] : []),
-          { role: 'user', content: userPrompt }
-        ]
-      })
-    });
-    const data = await resp.json();
-    return data.choices?.[0]?.message?.content || 'AI unavailable';
-  } catch (e) {
-    return `AI error: ${e.message}`;
-  }
-}
-
-router.post('/', async (req, res) => {
-  try {
-    await ensureTable();
-    const body = req.body || {};
-    const systemPrompt = `You are an expert assistant for the "Role-Based Access Control" feature in the ai-operating-system-for-companies platform. Provide actionable, specific, structured output.`;
-    const userPrompt = `Feature: Role-Based Access Control
-Kind: gap-nonai
-Context:
-${JSON.stringify(body, null, 2)}
-
-Please produce:
-1. Summary of what this feature should do given the input.
-2. Specific recommendations or computed outputs (3-7 bullets).
-3. Suggested next steps or data the operator should collect.
-4. Risk / caveat callouts.`;
-    const result = await callAI(userPrompt, systemPrompt);
-    try {
-      await pool.query(
-        'INSERT INTO gap_features (feature_slug, user_id, input, output) VALUES ($1,$2,$3,$4)',
-        ['rbac', req.user?.id || null, body, result]
-      );
-    } catch (e) { /* persistence optional */ }
-    res.json({ feature: 'Role-Based Access Control', kind: 'gap-nonai', result });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
+    await ensureTables();
+    const r = await pool.query('SELECT * FROM roles ORDER BY slug');
+    res.json({ roles: r.rows });
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-router.get('/history', async (req, res) => {
+// Create role
+router.post('/roles', async (req, res) => {
   try {
-    await ensureTable();
+    await ensureTables();
+    const { slug, name, description, permissions } = req.body || {};
+    if (!slug || !name) return res.status(400).json({ error: 'slug and name required' });
     const r = await pool.query(
-      'SELECT id, input, output, created_at FROM gap_features WHERE feature_slug=$1 ORDER BY created_at DESC LIMIT 25',
-      ['rbac']
+      `INSERT INTO roles (slug, name, description, permissions) VALUES ($1,$2,$3,$4)
+       ON CONFLICT (slug) DO UPDATE SET name=$2, description=$3, permissions=$4 RETURNING *`,
+      [slug, name, description || null, Array.isArray(permissions) ? permissions.join(',') : (permissions || '')]
     );
-    res.json({ history: r.rows });
-  } catch (err) {
-    res.json({ history: [] });
-  }
+    res.status(201).json({ role: r.rows[0] });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.delete('/roles/:slug', async (req, res) => {
+  try {
+    await ensureTables();
+    await pool.query('DELETE FROM user_roles WHERE role_slug=$1', [req.params.slug]);
+    await pool.query('DELETE FROM roles WHERE slug=$1', [req.params.slug]);
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// List user-role assignments
+router.get('/assignments', async (req, res) => {
+  try {
+    await ensureTables();
+    const { user_email, role_slug } = req.query;
+    const where = []; const args = [];
+    if (user_email) { args.push(user_email); where.push(`user_email=$${args.length}`); }
+    if (role_slug)  { args.push(role_slug);  where.push(`role_slug=$${args.length}`); }
+    const sql = `SELECT ur.*, r.name AS role_name, r.permissions
+                 FROM user_roles ur LEFT JOIN roles r ON r.slug=ur.role_slug
+                 ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
+                 ORDER BY granted_at DESC`;
+    const r = await pool.query(sql, args);
+    res.json({ assignments: r.rows });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Grant role to user
+router.post('/assignments', async (req, res) => {
+  try {
+    await ensureTables();
+    const { user_email, role_slug } = req.body || {};
+    if (!user_email || !role_slug) return res.status(400).json({ error: 'user_email and role_slug required' });
+    const r = await pool.query(
+      `INSERT INTO user_roles (user_email, role_slug, granted_by) VALUES ($1,$2,$3) RETURNING *`,
+      [user_email, role_slug, req.user?.email || null]
+    );
+    res.status(201).json({ assignment: r.rows[0] });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.delete('/assignments/:id', async (req, res) => {
+  try {
+    await ensureTables();
+    await pool.query('DELETE FROM user_roles WHERE id=$1', [req.params.id]);
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Resolve effective permissions for a user_email (union across assigned roles)
+router.get('/effective/:email', async (req, res) => {
+  try {
+    await ensureTables();
+    const r = await pool.query(`
+      SELECT r.slug, r.name, r.permissions FROM user_roles ur
+      JOIN roles r ON r.slug=ur.role_slug WHERE ur.user_email=$1`, [req.params.email]);
+    const permSet = new Set();
+    for (const row of r.rows) {
+      (row.permissions || '').split(',').map(s => s.trim()).filter(Boolean).forEach(p => permSet.add(p));
+    }
+    res.json({ email: req.params.email, roles: r.rows, permissions: Array.from(permSet) });
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 module.exports = router;

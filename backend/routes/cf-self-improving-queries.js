@@ -1,92 +1,103 @@
+// Self-Improving Query Library — operators rate saved_queries and propose
+// improved versions; high-rated improvements can be auto-applied to update
+// the saved_queries row. Closes the feedback loop on the NL/SQL library.
+// Table: query_feedback. Reads/updates saved_queries.
+
 const express = require('express');
 const router = express.Router();
 const verifyToken = require("../middleware/auth");
 const pool = require('../db');
 
-// TODO: configure credentials (OPENROUTER_API_KEY) in .env
-// Feature: Self-Improving Query Library (cf) — auto-scaffolded from audit gap.
-// Project: ai-operating-system-for-companies
-
 router.use(verifyToken);
 
-async function ensureTable() {
+async function ensureTables() {
   try {
-    await pool.query(`CREATE TABLE IF NOT EXISTS gap_features (
+    await pool.query(`CREATE TABLE IF NOT EXISTS query_feedback (
       id SERIAL PRIMARY KEY,
-      feature_slug TEXT NOT NULL,
-      user_id INTEGER,
-      input JSONB,
-      output TEXT,
+      query_id INTEGER,
+      rating INTEGER,
+      was_useful BOOLEAN,
+      comment TEXT,
+      improved_text TEXT,
+      applied BOOLEAN DEFAULT FALSE,
       created_at TIMESTAMP DEFAULT NOW()
     )`);
   } catch (e) { /* swallow */ }
 }
 
-async function callAI(userPrompt, systemPrompt = '') {
-  if (!process.env.OPENROUTER_API_KEY) return 'AI unavailable (no API key configured).';
+// Submit feedback on a saved query.
+router.post('/feedback', async (req, res) => {
   try {
-    const resp = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
-        'Content-Type': 'application/json',
-        'HTTP-Referer': 'http://localhost',
-        'X-Title': 'Self-Improving Query Library'
-      },
-      body: JSON.stringify({
-        model: process.env.OPENROUTER_MODEL || 'anthropic/claude-haiku-4.5',
-        messages: [
-          ...(systemPrompt ? [{ role: 'system', content: systemPrompt }] : []),
-          { role: 'user', content: userPrompt }
-        ]
-      })
-    });
-    const data = await resp.json();
-    return data.choices?.[0]?.message?.content || 'AI unavailable';
-  } catch (e) {
-    return `AI error: ${e.message}`;
-  }
-}
-
-router.post('/', async (req, res) => {
-  try {
-    await ensureTable();
-    const body = req.body || {};
-    const systemPrompt = `You are an expert assistant for the "Self-Improving Query Library" feature in the ai-operating-system-for-companies platform. Provide actionable, specific, structured output.`;
-    const userPrompt = `Feature: Self-Improving Query Library
-Kind: cf
-Context:
-${JSON.stringify(body, null, 2)}
-
-Please produce:
-1. Summary of what this feature should do given the input.
-2. Specific recommendations or computed outputs (3-7 bullets).
-3. Suggested next steps or data the operator should collect.
-4. Risk / caveat callouts.`;
-    const result = await callAI(userPrompt, systemPrompt);
-    try {
-      await pool.query(
-        'INSERT INTO gap_features (feature_slug, user_id, input, output) VALUES ($1,$2,$3,$4)',
-        ['self-improving-queries', req.user?.id || null, body, result]
-      );
-    } catch (e) { /* persistence optional */ }
-    res.json({ feature: 'Self-Improving Query Library', kind: 'cf', result });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
+    await ensureTables();
+    const { query_id, rating, was_useful, comment, improved_text } = req.body || {};
+    if (!query_id) return res.status(400).json({ error: 'query_id required' });
+    const exists = await pool.query('SELECT id FROM saved_queries WHERE id=$1', [query_id]);
+    if (!exists.rows[0]) return res.status(404).json({ error: 'saved_query not found' });
+    const r = await pool.query(
+      `INSERT INTO query_feedback (query_id, rating, was_useful, comment, improved_text)
+       VALUES ($1,$2,$3,$4,$5) RETURNING *`,
+      [query_id, rating || null, was_useful === undefined ? null : !!was_useful,
+       comment || null, improved_text || null]
+    );
+    res.status(201).json({ feedback: r.rows[0] });
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-router.get('/history', async (req, res) => {
+// Feedback for one query.
+router.get('/feedback/:query_id', async (req, res) => {
   try {
-    await ensureTable();
+    await ensureTables();
     const r = await pool.query(
-      'SELECT id, input, output, created_at FROM gap_features WHERE feature_slug=$1 ORDER BY created_at DESC LIMIT 25',
-      ['self-improving-queries']
+      `SELECT * FROM query_feedback WHERE query_id=$1 ORDER BY created_at DESC`,
+      [req.params.query_id]
     );
-    res.json({ history: r.rows });
-  } catch (err) {
-    res.json({ history: [] });
-  }
+    res.json({ feedback: r.rows });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Apply a proposed improvement: copies improved_text into saved_queries.query_text.
+router.post('/apply/:feedback_id', async (req, res) => {
+  try {
+    await ensureTables();
+    const fb = (await pool.query('SELECT * FROM query_feedback WHERE id=$1', [req.params.feedback_id])).rows[0];
+    if (!fb) return res.status(404).json({ error: 'feedback not found' });
+    if (!fb.improved_text) return res.status(400).json({ error: 'feedback has no improved_text' });
+    await pool.query(`UPDATE saved_queries SET query_text=$1 WHERE id=$2`, [fb.improved_text, fb.query_id]);
+    await pool.query(`UPDATE query_feedback SET applied=true WHERE id=$1`, [fb.id]);
+    res.json({ ok: true, query_id: fb.query_id });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Library overview: per-query stats + low-rated outliers ready for rework.
+router.get('/library', async (_req, res) => {
+  try {
+    await ensureTables();
+    const rows = (await pool.query(`
+      SELECT sq.id, sq.name, sq.query_type, sq.run_count, sq.last_run_at,
+             COUNT(qf.id) AS feedback_count,
+             ROUND(AVG(qf.rating)::numeric, 2) AS avg_rating,
+             COUNT(qf.id) FILTER (WHERE qf.was_useful) AS useful_count,
+             COUNT(qf.id) FILTER (WHERE qf.improved_text IS NOT NULL AND qf.applied=false) AS pending_improvements
+      FROM saved_queries sq
+      LEFT JOIN query_feedback qf ON qf.query_id=sq.id
+      GROUP BY sq.id ORDER BY sq.run_count DESC NULLS LAST, sq.created_at DESC LIMIT 100`)).rows;
+    const rework = rows.filter(r => r.avg_rating !== null && Number(r.avg_rating) <= 2).slice(0, 10);
+    const top    = rows.filter(r => r.avg_rating !== null && Number(r.avg_rating) >= 4).slice(0, 10);
+    res.json({ queries: rows, rework_candidates: rework, top_rated: top });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Recent improvements pending review.
+router.get('/pending', async (_req, res) => {
+  try {
+    await ensureTables();
+    const r = await pool.query(`
+      SELECT qf.*, sq.name AS query_name, sq.query_text AS current_text
+      FROM query_feedback qf JOIN saved_queries sq ON sq.id=qf.query_id
+      WHERE qf.improved_text IS NOT NULL AND qf.applied=false
+      ORDER BY qf.created_at DESC LIMIT 50`);
+    res.json({ pending: r.rows });
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 module.exports = router;

@@ -1,5 +1,5 @@
 import { NavLink, useNavigate } from 'react-router-dom';
-import { Database, Zap, Lightbulb, AlertTriangle, Search, Activity, Sparkles, Brain, LogOut, FileSpreadsheet, History, Filter, Beaker, LayoutDashboard, Plug, Bot, ScrollText, Workflow, Ticket, Network, Boxes } from 'lucide-react';
+import { Database, Zap, Lightbulb, AlertTriangle, Search, Activity, Sparkles, Brain, LogOut, FileSpreadsheet, History, Filter, Beaker, LayoutDashboard, Plug, Bot, ScrollText, Workflow, Ticket, Network, Boxes, ShieldCheck, Bell, Lock, Mic, Webhook, Code2, TrendingUp, SlidersHorizontal } from 'lucide-react';
 
 const navItems = [
   { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -27,6 +27,20 @@ const utilityNavItems = [
   { to: '/export', label: 'CSV Export', icon: FileSpreadsheet },
   { to: '/activity', label: 'Activity Feed', icon: History },
   { to: '/sample-data', label: 'Sample Data', icon: Beaker },
+];
+
+// Pass 7 — backlog (gap-* / cf-*) features
+const platformNavItems = [
+  { to: '/rbac', label: 'RBAC', icon: ShieldCheck },
+  { to: '/alerting', label: 'Alerting', icon: Bell },
+  { to: '/pii-redaction', label: 'PII Redaction', icon: Lock },
+  { to: '/transcripts', label: 'Transcripts', icon: Mic },
+  { to: '/webhook-ingest', label: 'Webhook Ingest', icon: Webhook },
+  { to: '/connector-scripts', label: 'Connector Scripts', icon: Code2 },
+  { to: '/query-suggest', label: 'Query Suggester', icon: Sparkles },
+  { to: '/source-onboarding', label: 'Source Onboarding', icon: Plug },
+  { to: '/self-improving-queries', label: 'Self-Improving Queries', icon: TrendingUp },
+  { to: '/policy-drift', label: 'Policy Drift', icon: SlidersHorizontal },
 ];
 
 export default function Layout({ children }: { children: React.ReactNode }) {
@@ -62,6 +76,14 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           </div>
           <div className="pt-4 border-t border-gray-800 mt-2 space-y-0.5">
             {utilityNavItems.map(({ to, label, icon: Icon }) => (
+              <NavLink key={to} to={to} className={({ isActive }) => `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${isActive ? 'bg-teal-500/20 text-teal-400 border border-teal-500/30' : 'text-gray-400 hover:text-white hover:bg-gray-800'}`}>
+                <Icon className="w-4 h-4 flex-shrink-0" />{label}
+              </NavLink>
+            ))}
+          </div>
+          <div className="pt-4 border-t border-gray-800 mt-2 space-y-0.5">
+            <div className="px-3 pb-1 text-[10px] uppercase tracking-wider text-gray-500">Platform</div>
+            {platformNavItems.map(({ to, label, icon: Icon }) => (
               <NavLink key={to} to={to} className={({ isActive }) => `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${isActive ? 'bg-teal-500/20 text-teal-400 border border-teal-500/30' : 'text-gray-400 hover:text-white hover:bg-gray-800'}`}>
                 <Icon className="w-4 h-4 flex-shrink-0" />{label}
               </NavLink>

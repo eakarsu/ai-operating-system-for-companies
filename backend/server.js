@@ -45,3 +45,4 @@ app.use('/api/workflows', require('./routes/workflows'));
 
 // Custom Views (synthesized cross-feature views, audit 2026-05-18)
 app.use('/api/custom-views', require('./routes/customViews'));
+app.use('/api/policy-drift', require('./routes/policyDriftSimulator'));

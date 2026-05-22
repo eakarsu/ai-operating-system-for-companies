@@ -23,6 +23,23 @@ import ClosedLoopTicketsPage from './pages/ClosedLoopTicketsPage';
 import IntentGraphPage from './pages/IntentGraphPage';
 import CustomViewsPage from './pages/CustomViewsPage';
 
+import CodexCustomVizFeature from './pages/CodexCustomVizFeature';
+import CodexOperationsFeature from './pages/CodexOperationsFeature';
+
+import TimelineView from './pages/TimelineView';
+
+// Pass 7 — backlog implementation: gap-*/cf-* pages
+import GapRbac from './pages/GapRbac';
+import GapAlerting from './pages/GapAlerting';
+import GapPiiRedaction from './pages/GapPiiRedaction';
+import GapTranscripts from './pages/GapTranscripts';
+import GapWebhookIngest from './pages/GapWebhookIngest';
+import GapConnectors from './pages/GapConnectors';
+import GapQuerySuggest from './pages/GapQuerySuggest';
+import GapSourceOnboardingAgent from './pages/GapSourceOnboardingAgent';
+import CfSelfImprovingQueries from './pages/CfSelfImprovingQueries';
+import PolicyDriftSimulator from './pages/PolicyDriftSimulator';
+
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const token = localStorage.getItem('token');
   return token ? <>{children}</> : <Navigate to="/login" replace />;
@@ -32,6 +49,10 @@ export default function App() {
   return (
     <BrowserRouter>
       <Routes>
+        <Route path="/insights/timeline" element={<TimelineView />} />
+        <Route path="/codex/custom-viz" element={<CodexCustomVizFeature />} />
+        <Route path="/codex/operations" element={<CodexOperationsFeature />} />
+
         <Route path="/login" element={<Login />} />
         <Route path="/*" element={
           <PrivateRoute>
@@ -59,6 +80,17 @@ export default function App() {
                 <Route path="/export" element={<ExportPage />} />
                 <Route path="/activity" element={<ActivityPage />} />
                 <Route path="/sample-data" element={<SampleDataPage />} />
+                {/* Pass 7 — backlog implementation */}
+                <Route path="/rbac" element={<GapRbac />} />
+                <Route path="/alerting" element={<GapAlerting />} />
+                <Route path="/pii-redaction" element={<GapPiiRedaction />} />
+                <Route path="/transcripts" element={<GapTranscripts />} />
+                <Route path="/webhook-ingest" element={<GapWebhookIngest />} />
+                <Route path="/connector-scripts" element={<GapConnectors />} />
+                <Route path="/query-suggest" element={<GapQuerySuggest />} />
+                <Route path="/source-onboarding" element={<GapSourceOnboardingAgent />} />
+                <Route path="/self-improving-queries" element={<CfSelfImprovingQueries />} />
+                <Route path="/policy-drift" element={<PolicyDriftSimulator />} />
               </Routes>
             </Layout>
           </PrivateRoute>
