@@ -1,0 +1,30 @@
+'use strict';
+const test=require('node:test');const assert=require('node:assert/strict');const crypto=require('node:crypto');
+
+test('requester-to-independent-approval-to-evaluated-connector completion and failure',{skip:!process.env.TEST_DATABASE_URL},async()=>{
+  process.env.DATABASE_URL=process.env.TEST_DATABASE_URL;process.env.JWT_SECRET='integration-secret-with-at-least-32-characters';process.env.JWT_ISSUER='company-os-integration';process.env.JWT_AUDIENCE='company-os-api-integration';process.env.CORS_ORIGIN='http://localhost:5176';process.env.CONNECTOR_WEBHOOK_SECRETS_JSON=JSON.stringify({crm:'c'.repeat(32)});process.env.NODE_ENV='test';
+  const jwt=require('jsonwebtoken');const domain=require('./operatingWorkflow');const db=require('../db');const{createApp}=require('../server');const server=createApp().listen(Number(process.env.TEST_API_PORT||0),'127.0.0.1');await new Promise(resolve=>server.once('listening',resolve));const base=`http://127.0.0.1:${server.address().port}`;const tenant=`tenant-${crypto.randomUUID()}`;
+  const token=(role,id,tenantId=tenant)=>jwt.sign({id,role,tenantId},process.env.JWT_SECRET,{algorithm:'HS256',issuer:process.env.JWT_ISSUER,audience:process.env.JWT_AUDIENCE,expiresIn:'5m'});
+  const tokens={requester:token('requester','owner-1'),reviewer:token('reviewer','reviewer-1'),ownerReviewer:token('reviewer','owner-1'),operator:token('operator','operator-1'),other:token('operator','operator-2',`${tenant}-other`)};
+  const call=async(path,{as='requester',headers={},...options}={})=>{const response=await fetch(`${base}${path}`,{...options,headers:{authorization:`Bearer ${tokens[as]}`,...(options.body?{'content-type':'application/json'}:{}),...headers}});const body=response.status===204?null:await response.json();return{response,body}};
+  const transition=(id,expectedVersion,toStatus,as)=>call(`/api/governed-workflows/${id}/transitions`,{as,method:'POST',body:JSON.stringify({expectedVersion,toStatus,reason:'integration evidence'})});
+  const intake={title:'Renewal handoff',connector:'crm',operation:'upsert_account',acceptanceCriteria:['account linked','owner notified'],payload:{accountRef:'acct-1',name:'Acme'}};const providerEvents=[];
+  try{
+    assert.equal((await fetch(`${base}/healthz`)).status,200);assert.equal((await fetch(`${base}/api/governed-workflows`)).status,401);
+    const created=await call('/api/governed-workflows',{method:'POST',headers:{'idempotency-key':'integration-workflow-1'},body:JSON.stringify(intake)});assert.equal(created.response.status,201);
+    assert.equal((await call('/api/governed-workflows',{method:'POST',headers:{'idempotency-key':'integration-workflow-1'},body:JSON.stringify({...intake,title:'Changed'})})).response.status,409);
+    assert.equal((await call(`/api/governed-workflows/${created.body.id}`,{as:'other'})).response.status,404);
+    let item=(await transition(created.body.id,1,'validated','requester')).body;item=(await transition(item.id,item.version,'approval_pending','reviewer')).body;
+    assert.equal((await transition(item.id,item.version,'approved','ownerReviewer')).response.status,422);
+    item=(await transition(item.id,item.version,'approved','reviewer')).body;item=(await transition(item.id,item.version,'dispatch_pending','operator')).body;
+    const claimed=await call('/api/governed-workflows/connectors/crm/claim',{as:'operator',method:'POST'});assert.equal(claimed.response.status,200);assert.equal(claimed.body.operation,'upsert_account');
+    const callback={idempotencyKey:claimed.body.idempotency_key,outcome:'succeeded',receiptId:'crm-receipt-1',result:{accountRef:'acct-1'},evidence:{'account linked':true,'owner notified':true}};const eventId=`${tenant}-success`;providerEvents.push(eventId);const signature=domain.sign('c'.repeat(32),callback);
+    let response=await fetch(`${base}/api/governed-workflows/webhooks/crm`,{method:'POST',headers:{'content-type':'application/json','x-provider-event-id':eventId,'x-provider-signature':signature},body:JSON.stringify(callback)});assert.equal(response.status,202);
+    response=await fetch(`${base}/api/governed-workflows/webhooks/crm`,{method:'POST',headers:{'content-type':'application/json','x-provider-event-id':eventId,'x-provider-signature':signature},body:JSON.stringify(callback)});assert.equal(response.status,200);
+    assert.equal((await call(`/api/governed-workflows/${item.id}`)).body.status,'completed');
+
+    const failed=await call('/api/governed-workflows',{method:'POST',headers:{'idempotency-key':'integration-workflow-2'},body:JSON.stringify({...intake,title:'Failure path',payload:{accountRef:'acct-2',name:'Beta'}})});let failedItem=(await transition(failed.body.id,1,'validated','requester')).body;failedItem=(await transition(failedItem.id,failedItem.version,'approval_pending','reviewer')).body;failedItem=(await transition(failedItem.id,failedItem.version,'approved','reviewer')).body;failedItem=(await transition(failedItem.id,failedItem.version,'dispatch_pending','operator')).body;const failedClaim=await call('/api/governed-workflows/connectors/crm/claim',{as:'operator',method:'POST'});
+    const failureCallback={idempotencyKey:failedClaim.body.idempotency_key,outcome:'failed',retryable:false,errorCode:'remote_validation_failed'};const failureEventId=`${tenant}-failure`;providerEvents.push(failureEventId);response=await fetch(`${base}/api/governed-workflows/webhooks/crm`,{method:'POST',headers:{'content-type':'application/json','x-provider-event-id':failureEventId,'x-provider-signature':domain.sign('c'.repeat(32),failureCallback)},body:JSON.stringify(failureCallback)});assert.equal(response.status,202);assert.equal((await call(`/api/governed-workflows/${failedItem.id}`)).body.status,'delivery_failed');
+    assert.equal((await call('/api/governed-workflows/metrics',{as:'operator'})).body.healthy,false);
+  }finally{await db.query('DELETE FROM company_connector_events WHERE event_id=ANY($1)',[providerEvents]);await new Promise(resolve=>server.close(resolve));await db.end()}
+});

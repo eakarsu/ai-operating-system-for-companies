@@ -15,7 +15,7 @@ const kindColor: Record<string, string> = {
 
 export default function IntentGraphPage() {
   const [nodes, setNodes] = useState<Node[]>([]);
-  const [edges, setEdges] = useState<Edge[]>([]);
+  const [, setEdges] = useState<Edge[]>([]);
   const [counts, setCounts] = useState<any>({});
   const [departments, setDepartments] = useState<any[]>([]);
   const [selected, setSelected] = useState<Node | null>(null);

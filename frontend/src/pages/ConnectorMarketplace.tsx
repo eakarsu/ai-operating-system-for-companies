@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Plug, RefreshCw, Pause, Play, AlertCircle, CheckCircle2, Plus, Trash2 } from 'lucide-react';
+import { Plug, RefreshCw, Pause, Play, Plus, Trash2 } from 'lucide-react';
 import { apiFetch } from '../api';
 
 type Connector = {

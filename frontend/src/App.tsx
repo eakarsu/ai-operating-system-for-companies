@@ -45,13 +45,15 @@ function PrivateRoute({ children }: { children: React.ReactNode }) {
   return token ? <>{children}</> : <Navigate to="/login" replace />;
 }
 
+const generatedFeaturesEnabled = (import.meta as any).env?.DEV && (import.meta as any).env?.VITE_ENABLE_GENERATED_FEATURES === 'true';
+
 export default function App() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/insights/timeline" element={<TimelineView />} />
-        <Route path="/codex/custom-viz" element={<CodexCustomVizFeature />} />
-        <Route path="/codex/operations" element={<CodexOperationsFeature />} />
+        {generatedFeaturesEnabled&&<Route path="/insights/timeline" element={<TimelineView />} />}
+        {generatedFeaturesEnabled&&<Route path="/codex/custom-viz" element={<CodexCustomVizFeature />} />}
+        {generatedFeaturesEnabled&&<Route path="/codex/operations" element={<CodexOperationsFeature />} />}
 
         <Route path="/login" element={<Login />} />
         <Route path="/*" element={
@@ -66,31 +68,31 @@ export default function App() {
                 <Route path="/anomalies" element={<AnomaliesPage />} />
                 <Route path="/queries" element={<QueriesPage />} />
                 <Route path="/health" element={<HealthPage />} />
-                <Route path="/ai-center" element={<AICenter />} />
+                {generatedFeaturesEnabled&&<Route path="/ai-center" element={<AICenter />} />}
                 {/* Deep-feature routes */}
-                <Route path="/connectors" element={<ConnectorMarketplace />} />
-                <Route path="/agent-dispatcher" element={<AgentTaskDispatcher />} />
-                <Route path="/decision-replay" element={<DecisionReplayPage />} />
-                <Route path="/kpis" element={<KpiDashboard />} />
+                {generatedFeaturesEnabled&&<Route path="/connectors" element={<ConnectorMarketplace />} />}
+                {generatedFeaturesEnabled&&<Route path="/agent-dispatcher" element={<AgentTaskDispatcher />} />}
+                {generatedFeaturesEnabled&&<Route path="/decision-replay" element={<DecisionReplayPage />} />}
+                {generatedFeaturesEnabled&&<Route path="/kpis" element={<KpiDashboard />} />}
                 <Route path="/workflows" element={<WorkflowsPage />} />
-                <Route path="/tickets" element={<ClosedLoopTicketsPage />} />
-                <Route path="/intent-graph" element={<IntentGraphPage />} />
-                <Route path="/custom-views" element={<CustomViewsPage />} />
+                {generatedFeaturesEnabled&&<Route path="/tickets" element={<ClosedLoopTicketsPage />} />}
+                {generatedFeaturesEnabled&&<Route path="/intent-graph" element={<IntentGraphPage />} />}
+                {generatedFeaturesEnabled&&<Route path="/custom-views" element={<CustomViewsPage />} />}
                 <Route path="/search" element={<SearchPage />} />
                 <Route path="/export" element={<ExportPage />} />
                 <Route path="/activity" element={<ActivityPage />} />
-                <Route path="/sample-data" element={<SampleDataPage />} />
+                {generatedFeaturesEnabled&&<Route path="/sample-data" element={<SampleDataPage />} />}
                 {/* Pass 7 — backlog implementation */}
-                <Route path="/rbac" element={<GapRbac />} />
-                <Route path="/alerting" element={<GapAlerting />} />
-                <Route path="/pii-redaction" element={<GapPiiRedaction />} />
-                <Route path="/transcripts" element={<GapTranscripts />} />
-                <Route path="/webhook-ingest" element={<GapWebhookIngest />} />
-                <Route path="/connector-scripts" element={<GapConnectors />} />
-                <Route path="/query-suggest" element={<GapQuerySuggest />} />
-                <Route path="/source-onboarding" element={<GapSourceOnboardingAgent />} />
-                <Route path="/self-improving-queries" element={<CfSelfImprovingQueries />} />
-                <Route path="/policy-drift" element={<PolicyDriftSimulator />} />
+                {generatedFeaturesEnabled&&<Route path="/rbac" element={<GapRbac />} />}
+                {generatedFeaturesEnabled&&<Route path="/alerting" element={<GapAlerting />} />}
+                {generatedFeaturesEnabled&&<Route path="/pii-redaction" element={<GapPiiRedaction />} />}
+                {generatedFeaturesEnabled&&<Route path="/transcripts" element={<GapTranscripts />} />}
+                {generatedFeaturesEnabled&&<Route path="/webhook-ingest" element={<GapWebhookIngest />} />}
+                {generatedFeaturesEnabled&&<Route path="/connector-scripts" element={<GapConnectors />} />}
+                {generatedFeaturesEnabled&&<Route path="/query-suggest" element={<GapQuerySuggest />} />}
+                {generatedFeaturesEnabled&&<Route path="/source-onboarding" element={<GapSourceOnboardingAgent />} />}
+                {generatedFeaturesEnabled&&<Route path="/self-improving-queries" element={<CfSelfImprovingQueries />} />}
+                {generatedFeaturesEnabled&&<Route path="/policy-drift" element={<PolicyDriftSimulator />} />}
               </Routes>
             </Layout>
           </PrivateRoute>

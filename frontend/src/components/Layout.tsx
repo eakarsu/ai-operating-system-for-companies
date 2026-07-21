@@ -1,6 +1,8 @@
 import { NavLink, useNavigate } from 'react-router-dom';
 import { Database, Zap, Lightbulb, AlertTriangle, Search, Activity, Sparkles, Brain, LogOut, FileSpreadsheet, History, Filter, Beaker, LayoutDashboard, Plug, Bot, ScrollText, Workflow, Ticket, Network, Boxes, ShieldCheck, Bell, Lock, Mic, Webhook, Code2, TrendingUp, SlidersHorizontal } from 'lucide-react';
 
+const generatedFeaturesEnabled = (import.meta as any).env?.DEV && (import.meta as any).env?.VITE_ENABLE_GENERATED_FEATURES === 'true';
+
 const navItems = [
   { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { to: '/sources', label: 'Data Sources', icon: Database },
@@ -12,25 +14,25 @@ const navItems = [
 ];
 
 const opsNavItems = [
-  { to: '/kpis', label: 'KPI Registry', icon: Activity },
   { to: '/workflows', label: 'Workflows', icon: Workflow },
+  ...(generatedFeaturesEnabled?[{ to: '/kpis', label: 'KPI Registry', icon: Activity },
   { to: '/tickets', label: 'Closed-Loop Tickets', icon: Ticket },
   { to: '/intent-graph', label: 'Intent Graph', icon: Network },
   { to: '/agent-dispatcher', label: 'Agent Dispatcher', icon: Bot },
   { to: '/decision-replay', label: 'Decision Replay', icon: ScrollText },
   { to: '/connectors', label: 'Connectors', icon: Plug },
-  { to: '/custom-views', label: 'Org Views', icon: Boxes },
+  { to: '/custom-views', label: 'Org Views', icon: Boxes }]:[]),
 ];
 
 const utilityNavItems = [
   { to: '/search', label: 'Search & Filter', icon: Filter },
   { to: '/export', label: 'CSV Export', icon: FileSpreadsheet },
   { to: '/activity', label: 'Activity Feed', icon: History },
-  { to: '/sample-data', label: 'Sample Data', icon: Beaker },
+  ...(generatedFeaturesEnabled?[{ to: '/sample-data', label: 'Sample Data', icon: Beaker }]:[]),
 ];
 
 // Pass 7 — backlog (gap-* / cf-*) features
-const platformNavItems = [
+const platformNavItems = generatedFeaturesEnabled ? [
   { to: '/rbac', label: 'RBAC', icon: ShieldCheck },
   { to: '/alerting', label: 'Alerting', icon: Bell },
   { to: '/pii-redaction', label: 'PII Redaction', icon: Lock },
@@ -41,7 +43,7 @@ const platformNavItems = [
   { to: '/source-onboarding', label: 'Source Onboarding', icon: Plug },
   { to: '/self-improving-queries', label: 'Self-Improving Queries', icon: TrendingUp },
   { to: '/policy-drift', label: 'Policy Drift', icon: SlidersHorizontal },
-];
+] : [];
 
 export default function Layout({ children }: { children: React.ReactNode }) {
   const navigate = useNavigate();
@@ -61,11 +63,11 @@ export default function Layout({ children }: { children: React.ReactNode }) {
               <Icon className="w-4 h-4 flex-shrink-0" />{label}
             </NavLink>
           ))}
-          <div className="pt-4 border-t border-gray-800 mt-2">
+          {generatedFeaturesEnabled&&<div className="pt-4 border-t border-gray-800 mt-2">
             <NavLink to="/ai-center" className={({ isActive }) => `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${isActive ? 'bg-teal-500/20 text-teal-400 border border-teal-500/30' : 'text-gray-400 hover:text-white hover:bg-gray-800'}`}>
               <Sparkles className="w-4 h-4 flex-shrink-0" />AI Center
             </NavLink>
-          </div>
+          </div>}
           <div className="pt-4 border-t border-gray-800 mt-2 space-y-0.5">
             <div className="px-3 pb-1 text-[10px] uppercase tracking-wider text-gray-500">Operating System</div>
             {opsNavItems.map(({ to, label, icon: Icon }) => (
