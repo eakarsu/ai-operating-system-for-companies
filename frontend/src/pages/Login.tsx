@@ -26,8 +26,8 @@ export default function Login() {
   };
 
   const demoLogin = () => {
-    setEmail('demo@companyos.ai');
-    setPassword('demo123');
+    setEmail(import.meta.env.VITE_DEMO_EMAIL || '');
+    setPassword(import.meta.env.VITE_DEMO_PASSWORD || '');
     setTimeout(() => {
       document.getElementById('login-form')?.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }));
     }, 100);
