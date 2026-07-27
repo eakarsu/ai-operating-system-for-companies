@@ -15,6 +15,7 @@ const navItems = [
 
 const opsNavItems = [
   { to: '/workflows', label: 'Workflows', icon: Workflow },
+  { to: '/chief-of-staff', label: 'Operations Chief of Staff', icon: Bot },
   ...(generatedFeaturesEnabled?[{ to: '/kpis', label: 'KPI Registry', icon: Activity },
   { to: '/tickets', label: 'Closed-Loop Tickets', icon: Ticket },
   { to: '/intent-graph', label: 'Intent Graph', icon: Network },

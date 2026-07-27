@@ -32,6 +32,18 @@ const server=http.createServer(async(req,res)=>{
       const rows=query(`SELECT json_build_object('id',id,'feature',feature,'input',input,'output',output,'model',model,'createdAt',created_at)::text FROM runtime_ai_interactions WHERE user_id=${literal(user.id)}::uuid ORDER BY created_at DESC LIMIT 50`,{rows:true});
       return json(res,200,{history:rows?rows.split('\n').map(JSON.parse):[]});
     }
+    if(req.method==='GET'&&url.pathname==='/api/chief-of-staff/commitments'){
+      const user=actor(req);if(!user)return json(res,401,{error:'Authentication required'});
+      const rows=query(`SELECT row_to_json(t)::text FROM (SELECT * FROM chief_of_staff_commitments ORDER BY due_at,id LIMIT 100) t`,{rows:true});
+      return json(res,200,{data:rows?rows.split('\n').map(JSON.parse):[]});
+    }
+    if(req.method==='POST'&&url.pathname.match(/^\/api\/chief-of-staff\/commitments\/\d+\/advance$/)){
+      const user=actor(req);if(!user)return json(res,401,{error:'Authentication required'});const id=Number(url.pathname.split('/')[4]);
+      const current=query(`SELECT status FROM chief_of_staff_commitments WHERE id=${id}`,{rows:true});if(!current)return json(res,404,{error:'Commitment not found'});
+      const states=['captured','drafted','review','approved','closed'];const next=states[Math.min(states.indexOf(current)+1,states.length-1)];
+      const row=query(`WITH updated AS (UPDATE chief_of_staff_commitments SET status=${literal(next)},updated_at=NOW() WHERE id=${id} RETURNING *) SELECT row_to_json(updated)::text FROM updated`,{rows:true});
+      return json(res,200,{data:JSON.parse(row)});
+    }
     if(req.method==='POST'&&url.pathname===selectedEndpoint){
       const user=actor(req);if(!user)return json(res,401,{error:'Authentication required'});
       const body=await readBody(req);const prompt=String(body.prompt||body.question||body.message||body.context||'').trim();if(!prompt)return json(res,400,{error:'prompt is required'});
@@ -46,4 +58,3 @@ const server=http.createServer(async(req,res)=>{
   }catch(error){console.error(error.message);return json(res,500,{error:'Internal service error'});}
 });
 server.listen(port,'127.0.0.1',()=>console.log(`${project} runtime API listening on ${port}`));
-

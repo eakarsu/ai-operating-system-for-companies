@@ -39,6 +39,7 @@ import GapQuerySuggest from './pages/GapQuerySuggest';
 import GapSourceOnboardingAgent from './pages/GapSourceOnboardingAgent';
 import CfSelfImprovingQueries from './pages/CfSelfImprovingQueries';
 import PolicyDriftSimulator from './pages/PolicyDriftSimulator';
+import ChiefOfStaff from './pages/ChiefOfStaff';
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const token = localStorage.getItem('token');
@@ -75,6 +76,7 @@ export default function App() {
                 {generatedFeaturesEnabled&&<Route path="/decision-replay" element={<DecisionReplayPage />} />}
                 {generatedFeaturesEnabled&&<Route path="/kpis" element={<KpiDashboard />} />}
                 <Route path="/workflows" element={<WorkflowsPage />} />
+                <Route path="/chief-of-staff" element={<ChiefOfStaff />} />
                 {generatedFeaturesEnabled&&<Route path="/tickets" element={<ClosedLoopTicketsPage />} />}
                 {generatedFeaturesEnabled&&<Route path="/intent-graph" element={<IntentGraphPage />} />}
                 {generatedFeaturesEnabled&&<Route path="/custom-views" element={<CustomViewsPage />} />}
