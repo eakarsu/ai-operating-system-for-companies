@@ -59,7 +59,7 @@ export default function Login() {
             </button>
           </form>
           <button onClick={demoLogin} className="w-full mt-3 bg-gray-800 hover:bg-gray-700 text-white font-medium py-2.5 rounded-lg transition-colors text-sm border border-gray-700">
-            Demo Login
+            Auto Fill Demo Credentials
           </button>
         </div>
       </div>
