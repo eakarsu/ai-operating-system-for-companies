@@ -1,0 +1,51 @@
+[
+  {
+    "name": "CfClosedLoopTickets",
+    "id": "cf-closed-loop-tickets",
+    "title": "Closed-Loop Ticket Generation",
+    "description": "Prepare a professional advisory report for closed-loop ticket generation using the brief and evidence you provide. Review the findings, assumptions, and action plan before applying changes.",
+    "samples": []
+  },
+  {
+    "name": "CfConnectorMarketplace",
+    "id": "cf-connector-marketplace",
+    "title": "Live Connector Marketplace",
+    "description": "Prepare a professional advisory report for live connector marketplace using the brief and evidence you provide. Review the findings, assumptions, and action plan before applying changes.",
+    "samples": []
+  },
+  {
+    "name": "CfEmbeddingsIndex",
+    "id": "cf-embeddings-index",
+    "title": "Embedding Index for Semantic Recall",
+    "description": "Prepare a professional advisory report for embedding index for semantic recall using the brief and evidence you provide. Review the findings, assumptions, and action plan before applying changes.",
+    "samples": []
+  },
+  {
+    "name": "CfIntentGraph",
+    "id": "cf-intent-graph",
+    "title": "Org-Wide Intent Graph",
+    "description": "Prepare a professional advisory report for org-wide intent graph using the brief and evidence you provide. Review the findings, assumptions, and action plan before applying changes.",
+    "samples": []
+  },
+  {
+    "name": "GapAgentTaskDispatcher",
+    "id": "gap-ai-agent-task-dispatcher",
+    "title": "Agent Task Dispatcher",
+    "description": "Prepare a professional advisory report for agent task dispatcher using the brief and evidence you provide. Review the findings, assumptions, and action plan before applying changes.",
+    "samples": []
+  },
+  {
+    "name": "GapDecisionReplay",
+    "id": "gap-ai-decision-replay",
+    "title": "Decision Replay",
+    "description": "Prepare a professional advisory report for decision replay using the brief and evidence you provide. Review the findings, assumptions, and action plan before applying changes.",
+    "samples": []
+  },
+  {
+    "name": "GapSpecGenerator",
+    "id": "gap-ai-spec-generator",
+    "title": "Spec Generator",
+    "description": "Prepare a professional advisory report for spec generator using the brief and evidence you provide. Review the findings, assumptions, and action plan before applying changes.",
+    "samples": []
+  }
+]

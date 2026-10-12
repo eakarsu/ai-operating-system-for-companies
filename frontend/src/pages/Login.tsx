@@ -28,10 +28,10 @@ export default function Login() {
   const demoLogin = () => {
     setEmail(import.meta.env.VITE_DEMO_EMAIL || '');
     setPassword(import.meta.env.VITE_DEMO_PASSWORD || '');
-    setTimeout(() => {
-      document.getElementById('login-form')?.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }));
-    }, 100);
+    setError('');
   };
+  const demoConfigured = import.meta.env.VITE_ENABLE_DEMO_CREDENTIAL_AUTOFILL === 'true' &&
+    Boolean(import.meta.env.VITE_DEMO_EMAIL && import.meta.env.VITE_DEMO_PASSWORD);
 
   return (
     <div className="min-h-screen bg-gray-950 flex items-center justify-center p-4">
@@ -58,9 +58,10 @@ export default function Login() {
               {loading ? 'Signing in...' : 'Sign In'}
             </button>
           </form>
-          <button onClick={demoLogin} className="w-full mt-3 bg-gray-800 hover:bg-gray-700 text-white font-medium py-2.5 rounded-lg transition-colors text-sm border border-gray-700">
-            Auto Fill Demo Credentials
+          <button type="button" onClick={demoLogin} disabled={!demoConfigured || loading} className="w-full mt-3 bg-gray-800 hover:bg-gray-700 text-white font-medium py-2.5 rounded-lg transition-colors text-sm border border-gray-700 disabled:opacity-50">
+            Fill Demo Credentials
           </button>
+          {!demoConfigured && <p className="text-gray-400 text-sm mt-2">Demo credentials are not configured for this session.</p>}
         </div>
       </div>
     </div>

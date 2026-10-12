@@ -1,18 +1,6 @@
 import { useState } from 'react';
 import { Sparkles, Copy, Check } from 'lucide-react';
-
-function formatText(text: string) {
-  return text.split('\n').map((line, i) => {
-    if (line.startsWith('**') && line.endsWith('**')) return <p key={i} className="font-bold text-white mt-2">{line.slice(2,-2)}</p>;
-    if (line.startsWith('- ')||line.startsWith('• ')) return <li key={i} className="ml-4 text-gray-200">{line.slice(2)}</li>;
-    if (line.match(/^\d+\./)) return <li key={i} className="ml-4 text-gray-200 list-decimal">{line.replace(/^\d+\.\s*/,'')}</li>;
-    if (line.startsWith('## ')) return <h3 key={i} className="font-semibold text-teal-300 mt-3 text-base">{line.slice(3)}</h3>;
-    if (line.startsWith('# ')) return <h2 key={i} className="font-bold text-white mt-3 text-lg">{line.slice(2)}</h2>;
-    if (line==='') return <br key={i} />;
-    const parts = line.split(/(\*\*[^*]+\*\*)/g);
-    return <p key={i} className="text-gray-200">{parts.map((p,j)=>p.startsWith('**')&&p.endsWith('**')?<strong key={j} className="text-white">{p.slice(2,-2)}</strong>:p)}</p>;
-  });
-}
+import AIReport from './AIReport';
 
 export default function AIResponse({ result, loading }: { result: string|null; loading: boolean }) {
   const [copied, setCopied] = useState(false);
@@ -32,7 +20,7 @@ export default function AIResponse({ result, loading }: { result: string|null; l
           <button onClick={()=>{if(result){navigator.clipboard.writeText(result);setCopied(true);setTimeout(()=>setCopied(false),2000);}}} className="flex items-center gap-1 text-gray-400 hover:text-white text-xs transition-colors">{copied?<Check className="w-3.5 h-3.5 text-green-400"/>:<Copy className="w-3.5 h-3.5"/>}{copied?'Copied':'Copy'}</button>
         </div>
       </div>
-      <div className="space-y-1 text-sm leading-relaxed">{formatText(result)}</div>
+      <AIReport response={result} title="AI response" />
     </div>
   );
 }

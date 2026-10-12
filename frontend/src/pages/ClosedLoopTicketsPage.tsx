@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Ticket, RefreshCw, CheckCircle2, Sparkles, ExternalLink } from 'lucide-react';
 import { apiFetch } from '../api';
+import AIReport from '../components/AIReport';
 
 type T = {
   id: number; source_type: string; source_id: number | null; title: string; spec: string;
@@ -102,6 +103,11 @@ export default function ClosedLoopTicketsPage() {
 
       <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 mb-6">
         <h2 className="text-sm uppercase text-gray-400 mb-2 flex items-center gap-2"><Sparkles className="w-4 h-4 text-teal-400" />Generate spec → ticket</h2>
+        <div className="flex flex-wrap gap-2 mb-2">{[
+          ['Payment failures', 'Payment failure rate rose after the latest checkout deployment. Draft an investigation ticket with rollback criteria and an owner review.'],
+          ['Renewal risk', 'Several enterprise renewals are approaching with unresolved support tickets. Draft a customer health follow-up ticket.'],
+          ['KPI regression', 'Weekly activation fell below its baseline for two periods. Draft a measurement and remediation ticket with explicit assumptions.'],
+        ].map(([label, freeform]) => <button key={label} type="button" onClick={() => setSpecInput(current => ({ ...current, freeform }))} className="text-xs px-2 py-1 rounded bg-gray-800 text-teal-300">{label}</button>)}</div>
         <div className="flex flex-wrap gap-2">
           <select value={specInput.source_type} onChange={e=>setSpecInput({...specInput, source_type: e.target.value})} className="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-white text-sm">
             <option value="anomaly">anomaly</option>
@@ -115,9 +121,7 @@ export default function ClosedLoopTicketsPage() {
         {generated && (
           <div className="mt-3 bg-gray-950/50 border border-gray-800 rounded p-3 text-xs">
             <div className="text-emerald-300">Ticket #{generated.ticket_id} created · llm: {generated.llm_used ? 'used' : 'fallback'}</div>
-            <div className="text-white font-semibold mt-1">{generated.spec.title}</div>
-            <div className="text-gray-400 mt-1">target_kpi: {generated.spec.target_kpi || '—'} · priority: {generated.spec.priority} · assignee: {generated.spec.assignee_suggestion}</div>
-            {generated.spec.spec_markdown && <pre className="mt-2 text-gray-300 whitespace-pre-wrap">{generated.spec.spec_markdown}</pre>}
+            <AIReport response={generated.spec} title="Generated spec" />
           </div>
         )}
       </div>

@@ -153,7 +153,7 @@ export default function AICenter() {
           </form>
         )}
         {activeTab === 'anomaly' && (
-          <form onSubmit={e => { e.preventDefault(); call(() => api.ai.anomalyExplanation(0, anomalyDesc)); }} className="space-y-4">
+          <form onSubmit={e => { e.preventDefault(); call(() => api.ai.anomalyExplanation(undefined, anomalyDesc)); }} className="space-y-4">
             <div><h2 className="text-lg font-semibold text-white mb-1">Anomaly Explanation</h2><p className="text-gray-400 text-sm mb-4">Get AI-powered root cause analysis and remediation steps for detected anomalies.</p></div>
             <SampleBar samples={anomalySamples} onPick={v => { setAnomalyDesc(v.anomalyDesc); }} />
             <div><label className="block text-sm text-gray-300 mb-1">Anomaly Description</label><textarea value={anomalyDesc} onChange={e=>setAnomalyDesc(e.target.value)} rows={4} className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 text-white text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 resize-none" placeholder="Describe the anomaly, e.g., API response times spiked 350% for 15 minutes during peak hours, affecting payment processing" required /></div>

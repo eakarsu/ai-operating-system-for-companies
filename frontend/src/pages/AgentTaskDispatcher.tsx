@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Bot, Play, Sparkles, ListChecks, RefreshCw } from 'lucide-react';
 import { apiFetch } from '../api';
+import AIReport from '../components/AIReport';
 
 type Agent = { slug: string; name: string; role: string; department: string; tool_slugs: string };
 type Tool  = { slug: string; name: string; connector_vendor: string; side_effect: string; approval_required: boolean };
@@ -74,6 +75,11 @@ export default function AgentTaskDispatcher() {
 
       <div className="bg-gray-900 border border-gray-800 rounded-xl p-5 mb-6">
         <h2 className="text-lg font-semibold text-white mb-3 flex items-center gap-2"><Sparkles className="w-4 h-4 text-teal-400" />Dispatch goal</h2>
+        <div className="flex flex-wrap gap-2 mb-3">{[
+          ['Payment incident', 'Investigate the current payment latency and failed charge spike, identify a safe recovery plan, and flag any approval required before execution.'],
+          ['Renewal risk', 'Review accounts renewing this quarter with unresolved support issues and propose owner-reviewed follow-up tasks.'],
+          ['Delivery health', 'Summarize recent deployment failures and open incidents, then plan read-only checks and recommended next steps.'],
+        ].map(([label, sampleGoal]) => <button key={label} type="button" onClick={() => setGoal(sampleGoal)} className="text-xs px-2 py-1 rounded bg-gray-800 text-teal-300">{label}</button>)}</div>
         <textarea value={goal} onChange={e=>setGoal(e.target.value)} rows={3} className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm" placeholder="e.g. Recover us-east-1 payment outage" />
         <div className="flex gap-2 mt-3">
           <button onClick={planOnly} disabled={busy || !goal.trim()} className="bg-gray-800 hover:bg-gray-700 disabled:opacity-50 text-white text-sm font-semibold px-3 py-1.5 rounded flex items-center gap-1"><ListChecks className="w-4 h-4" />Plan only</button>
@@ -106,7 +112,7 @@ export default function AgentTaskDispatcher() {
                     </div>
                   </div>
                   <div className="text-xs text-gray-400 italic mb-1">{s.why}</div>
-                  <pre className="text-xs text-gray-300 bg-gray-900 rounded p-2 overflow-x-auto">{JSON.stringify(s.args, null, 2)}</pre>
+                  <AIReport response={s.args} title="Step arguments" />
                 </li>
               );
             })}

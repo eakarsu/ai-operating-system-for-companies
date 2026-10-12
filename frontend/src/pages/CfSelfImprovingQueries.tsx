@@ -53,6 +53,12 @@ export default function CfSelfImprovingQueries() {
         <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
           <h2 className="text-white font-bold mb-3">Submit Feedback</h2>
           <form onSubmit={submit} className="space-y-2">
+            <div className="flex flex-wrap gap-2">{[
+              ['Useful answer', 5, true, 'The query answered the weekly review question clearly.', 'Add the reporting period and source names to the summary.'],
+              ['Needs context', 3, false, 'The result needs a clearer comparison period.', 'Compare this period with the previous period and show the source for each metric.'],
+              ['Incorrect scope', 1, false, 'The answer included records outside the requested team.', 'Filter to the selected team and state the applied filters before summarizing.'],
+            ].map(([label, rating, useful, comment, improved]) => <button key={String(label)} type="button" onClick={() => setForm({ query_id: form.query_id, rating: Number(rating), was_useful: Boolean(useful), comment: String(comment), improved_text: String(improved) })} className="text-xs px-2 py-1 rounded bg-gray-800 text-teal-300">{label}</button>)}</div>
+            {!form.query_id && <p className="text-xs text-gray-400">Select an existing saved query before submitting feedback.</p>}
             <select className={inp} value={form.query_id} onChange={e=>setForm({...form,query_id:e.target.value})} required>
               <option value="">-- pick saved query --</option>
               {lib.map(q => <option key={q.id} value={q.id}>#{q.id} {q.name}</option>)}

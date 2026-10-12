@@ -44,7 +44,7 @@ export const api = {
   ai: {
     generateInsights: (focus_area: string, time_range: string) => apiFetch('/ai/generate-insights', { method: 'POST', body: JSON.stringify({ focus_area, time_range }) }),
     query: (question: string) => apiFetch('/ai/query', { method: 'POST', body: JSON.stringify({ question }) }),
-    anomalyExplanation: (anomaly_id: number, anomaly_description: string) => apiFetch('/ai/anomaly-explanation', { method: 'POST', body: JSON.stringify({ anomaly_id, anomaly_description }) }),
+    anomalyExplanation: (anomaly_id: number | undefined, anomaly_description: string) => apiFetch('/ai/anomaly-explanation', { method: 'POST', body: JSON.stringify({ ...(anomaly_id ? { anomaly_id } : {}), anomaly_description }) }),
     healthAnalysis: (department: string) => apiFetch('/ai/health-analysis', { method: 'POST', body: JSON.stringify({ department }) }),
     crossSourceInsight: (source_ids: number[]) => apiFetch('/ai/cross-source-insight', { method: 'POST', body: JSON.stringify({ source_ids }) }),
     anomalyCluster: (status: string) => apiFetch('/ai/anomaly-cluster', { method: 'POST', body: JSON.stringify({ status }) }),

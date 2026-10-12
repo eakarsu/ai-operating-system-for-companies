@@ -1,3 +1,4 @@
+import AIReportLibrary from "./AIReportLibrary";
 import { NavLink, useNavigate } from 'react-router-dom';
 import { Database, Zap, Lightbulb, AlertTriangle, Search, Activity, Sparkles, Brain, LogOut, FileSpreadsheet, History, Filter, Beaker, LayoutDashboard, Plug, Bot, ScrollText, Workflow, Ticket, Network, Boxes, ShieldCheck, Bell, Lock, Mic, Webhook, Code2, TrendingUp, SlidersHorizontal } from 'lucide-react';
 
@@ -98,7 +99,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             <LogOut className="w-4 h-4" />Sign Out
           </button>
         </div>
-      </aside>
+      <AIReportLibrary /></aside>
       <main className="flex-1 overflow-hidden">{children}</main>
     </div>
   );

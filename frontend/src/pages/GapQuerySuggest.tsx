@@ -45,6 +45,11 @@ export default function GapQuerySuggest() {
 
       <div className="max-w-4xl bg-gray-900 border border-gray-800 rounded-xl p-4">
         <label className="block text-sm text-gray-300 mb-1">Operator context (optional)</label>
+        <div className="flex flex-wrap gap-2 mb-2">{[
+          ['Board review', 'Prepare queries for tomorrow’s board review: revenue retention, monthly burn, and customer concentration over the last quarter.'],
+          ['Incident follow-up', 'Investigate last week’s payment latency incident across deploys, alerts, failed charges, and support escalations.'],
+          ['Customer health', 'Find accounts with falling usage, unresolved support tickets, and renewal dates in the next 90 days.'],
+        ].map(([label, value]) => <button key={label} type="button" onClick={() => setContext(value)} className="text-xs px-2 py-1 rounded bg-gray-800 text-teal-300">{label}</button>)}</div>
         <textarea className={inp+" resize-none h-24"} placeholder="e.g. board meeting tomorrow, focus on Q2 finance" value={context} onChange={e=>setContext(e.target.value)} />
         <button onClick={suggest} disabled={busy} className="mt-2 bg-teal-500 hover:bg-teal-400 text-gray-950 font-bold px-4 py-2 rounded-lg text-sm disabled:opacity-50">{busy ? 'Generating...' : 'Suggest 5 Queries'}</button>
 

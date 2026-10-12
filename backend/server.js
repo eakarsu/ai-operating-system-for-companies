@@ -34,7 +34,15 @@ function createApp() {
     app.use('/api/policy-drift', require('./routes/policyDriftSimulator'));
   } else app.use(['/api/ai','/api/admin','/api/gap-ai','/api/gap-nonai','/api/cf-'], (_req,res) => res.status(410).json({ error: 'Generated and ungrounded demo endpoints are disabled' }));
   app.use('/api/kpis', require('./routes/kpis'));
-  app.use('/api', (req,res) => res.status(404).json({ error:'Not found', path:req.originalUrl }));
+
+// Advisory AI reports only; native execution and approval routes stay unchanged.
+const aiWorkspaceSupport = require("./aiWorkspaceAdapters.cjs");
+const aiWorkspaceDatabase = require("./db.js");
+app.use('/api/report-workspace', require("./aiWorkspace.cjs").createAIWorkspaceRouter({
+  pool: aiWorkspaceDatabase, authenticateToken: aiWorkspaceSupport.verifiedActorAuth(require("./middleware/auth.js")),
+  aiRateLimiter: aiWorkspaceSupport.createWorkspaceLimiter(), features: require("./aiWorkspaceFeatures.json"),
+}));
+app.use('/api', (req,res) => res.status(404).json({ error:'Not found', path:req.originalUrl }));
   app.use((error,_req,res,_next) => { if (error.type === 'entity.too.large') return res.status(413).json({ error:'Request too large' }); console.error(error.stack); res.status(500).json({ error:'Internal server error' }); });
   return app;
 }

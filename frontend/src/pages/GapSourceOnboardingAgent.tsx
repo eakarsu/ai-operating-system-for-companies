@@ -51,6 +51,11 @@ export default function GapSourceOnboardingAgent() {
       {error && <p className="text-red-400 text-sm mb-3">{error}</p>}
 
       <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 max-w-4xl mb-4">
+        <div className="flex flex-wrap gap-2 mb-3">{[
+          ['Stripe revenue', 'stripe', 'Connect subscription, payment, and churn events for monthly revenue reporting.'],
+          ['Salesforce pipeline', 'salesforce', 'Sync opportunities and stage changes for pipeline coverage and forecast review.'],
+          ['GitHub delivery', 'github', 'Track pull request throughput and deployment activity for engineering health.'],
+        ].map(([label, sampleVendor, sampleGoal]) => <button key={label} type="button" onClick={() => { setVendor(sampleVendor); setGoal(sampleGoal); }} className="text-xs px-2 py-1 rounded bg-gray-800 text-teal-300">{label}</button>)}</div>
         <div className="grid grid-cols-2 gap-3">
           <div><label className="block text-sm text-gray-300 mb-1">Vendor</label><input className={inp} value={vendor} onChange={e=>setVendor(e.target.value)} placeholder="stripe, salesforce..." /></div>
           <div><label className="block text-sm text-gray-300 mb-1">Goal (optional)</label><input className={inp} value={goal} onChange={e=>setGoal(e.target.value)} placeholder="e.g. wire MRR + churn KPIs" /></div>
