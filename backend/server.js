@@ -25,6 +25,8 @@ function createApp() {
   app.use('/api/activity', require('./routes/activity'));
   app.use('/api/export', require('./routes/exportCsv'));
   app.use('/api/search', require('./routes/search'));
+  app.use('/api/tasks', require('./routes/tasks'));
+  app.post('/api/company-insights', require('./middleware/auth'), async (req,res)=>{ try{ const db=require('./db'); const{filterRecords,buildInsights}=require('./featurePack'); const r=await db.query('SELECT * FROM events ORDER BY occurred_at DESC LIMIT 200'); res.json({aiGenerated:false,source:'deterministic-fallback',insights:buildInsights(filterRecords(r.rows,req.body?.filters||{}),['Event severity concentration','Open anomaly ageing','Insight action pipeline'])}); }catch(e){ res.status(500).json({error:e.message}); } });
   if (generated) {
     app.use('/api/ai', require('./routes/ai'));
     app.use('/api/admin', require('./routes/sample_data'));

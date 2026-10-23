@@ -67,8 +67,15 @@ for assigned_port in "$BACKEND_PORT" "$FRONTEND_PORT";do lsof -nP -iTCP:"$assign
 export RUNTIME_PROJECT_NAME=ai-operating-system-for-companies RUNTIME_AI_ENDPOINT=/api/ai/company-operations RUNTIME_AI_FEATURE=company-operations
 export RUNTIME_AI_SYSTEM_PROMPT='You are a company operating-system assistant. Provide grounded priorities, dependencies, owners, risks, and explicit assumptions.'
 node "$PROJECT_DIR/runtime/setup.mjs"
+FRONTEND_ORIGIN="http://127.0.0.1:$FRONTEND_PORT"
+case ",${CORS_ORIGINS:-}," in *'*'*) echo "CORS_ORIGINS must not contain a wildcard" >&2;exit 1 ;; esac
+export CORS_ORIGIN="$FRONTEND_ORIGIN" CORS_ORIGINS="$FRONTEND_ORIGIN" CLIENT_URL="$FRONTEND_ORIGIN"
+TEST_DB_NAME="${DATABASE_URL##*/}_test"; TEST_DATABASE_URL="${DATABASE_URL%/*}/$TEST_DB_NAME"; export TEST_DATABASE_URL
+(cd "$PROJECT_DIR/backend" && node scripts/setup-test-db.mjs) || { echo "Dedicated test database setup failed" >&2;exit 1; }
+if [ -z "$(psql "$TEST_DATABASE_URL" -Atc "SELECT 1 FROM company_identities WHERE lower(email)=lower('${ADMIN_EMAIL:-}')" 2>/dev/null)" ]; then (cd "$PROJECT_DIR/backend" && DATABASE_URL="$TEST_DATABASE_URL" BOOTSTRAP_ACKNOWLEDGEMENT=create-initial-admin node scripts/create-admin.js) || { echo "Administrator provisioning failed" >&2;exit 1; }; else echo "Administrator already exists; skipping provisioning"; fi
+export ENABLE_GENERATED_FEATURES=true
 CHILD_PIDS=()
-(cd "$PROJECT_DIR"&&exec node runtime/api.mjs)&CHILD_PIDS+=("$!")
+(cd "$PROJECT_DIR/backend"&&DATABASE_URL="$TEST_DATABASE_URL" PORT="$BACKEND_PORT" exec node server.js)&CHILD_PIDS+=("$!")
 (cd "$PROJECT_DIR/frontend"&&exec npm run dev -- --host 127.0.0.1 --port "$FRONTEND_PORT" --strictPort)&CHILD_PIDS+=("$!")
 cleanup(){ trap - EXIT INT TERM;for pid in "${CHILD_PIDS[@]}";do kill "$pid" 2>/dev/null||true;done;for pid in "${CHILD_PIDS[@]}";do wait "$pid" 2>/dev/null||true;done; }
 trap cleanup EXIT INT TERM

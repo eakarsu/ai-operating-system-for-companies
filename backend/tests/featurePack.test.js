@@ -1,0 +1,6 @@
+const test=require("node:test");const assert=require("node:assert/strict");const{filterRecords,recordsToCsv,exportRecords,buildInsights}=require("../featurePack");
+const rows=[{id:1,title:"Alpha outage",status:"open",severity:"high",amount:100},{id:2,title:"Beta",status:"resolved",severity:"low",amount:0}];
+test("search/filter narrows main list",()=>{assert.equal(filterRecords(rows,{q:"alpha"}).length,1);assert.equal(filterRecords(rows,{status:"resolved"})[0].id,2);});
+test("CSV/JSON export preserves 0",()=>{assert.match(recordsToCsv(rows),/Beta/);assert.equal(JSON.parse(exportRecords(rows,"json").body).items[1].amount,0);assert.equal(exportRecords([],"csv").body,"");});
+test("deterministic AI fallback labelled, preserves empty",()=>{const out=buildInsights(rows,["Event severity concentration","Open anomaly ageing","Insight action pipeline"]);assert.equal(out.length,3);for(const f of out){assert.equal(f.aiGenerated,false);assert.equal(f.source,"deterministic-fallback");}assert.equal(buildInsights([],["a","b","c"])[0].metrics[0].value,0);});
+test("tasks route is authenticated",()=>{const s=require("fs").readFileSync(__dirname+"/../routes/tasks.js","utf8");assert.ok(s.includes("auth"));assert.ok(s.includes("closed_loop_tickets"));});

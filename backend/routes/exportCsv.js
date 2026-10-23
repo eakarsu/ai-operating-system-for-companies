@@ -34,7 +34,8 @@ router.get('/:resource', auth, async (req, res) => {
     const sql = RESOURCE_QUERIES[resource];
     if (!sql) return res.status(404).json({ error: 'Unknown resource' });
     const result = await db.query(sql);
-    const rows = result.rows;
+    const rows = require('../featurePack').filterRecords(result.rows, req.query);
+    if (String(req.query.format||'csv').toLowerCase() === 'json') { const out = require('../featurePack').exportRecords(rows, 'json'); res.setHeader('Content-Type', out.contentType); res.setHeader('Content-Disposition', `attachment; filename="${resource}.json"`); return res.send(out.body); }
     if (rows.length === 0) {
       res.setHeader('Content-Type', 'text/csv');
       res.setHeader('Content-Disposition', `attachment; filename="${resource}.csv"`);

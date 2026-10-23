@@ -6,7 +6,7 @@ const auth = require('../middleware/auth');
 router.get('/', auth, async (req, res) => {
   try {
     const result = await db.query('SELECT e.*, ds.name AS source_name FROM events e LEFT JOIN data_sources ds ON e.source_id = ds.id ORDER BY e.occurred_at DESC');
-    res.json(result.rows);
+    res.json(require('../featurePack').filterRecords(result.rows, req.query));
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
